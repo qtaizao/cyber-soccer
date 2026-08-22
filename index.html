@@ -7,15 +7,18 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap');
-        :root { color-scheme: dark; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+        :root { color-scheme: dark; --panel: rgba(15, 23, 42, .86); --panel-border: rgba(51, 65, 85, .72); --muted: #94a3b8; }
         body { font-family: 'Noto Sans SC', sans-serif; min-height: 100vh; transition: background 0.3s ease, color 0.3s ease; -webkit-tap-highlight-color: transparent; letter-spacing: 0; }
-        .font-cyber { font-family: 'Orbitron', sans-serif; }
+        .font-cyber { font-family: 'Noto Sans SC', sans-serif; }
         .theme-card, .match-card { border-radius: 8px !important; }
         .theme-btn-sub, button, input, textarea, details, .custom-box { border-radius: 8px !important; }
-        .match-card { position: relative; overflow: hidden; }
-        .match-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0ea5e9, #22c55e, #f59e0b); opacity: .85; }
-        .match-card:hover { transform: translateY(-1px); border-color: rgba(14, 165, 233, .65) !important; }
+        .theme-card { background: var(--panel); border-color: var(--panel-border); box-shadow: 0 16px 40px rgba(2, 6, 23, .22); }
+        .match-card { position: relative; overflow: hidden; background: rgba(15, 23, 42, .68); }
+        .match-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: #38bdf8; opacity: .75; }
+        .match-card:hover { transform: translateY(-1px); border-color: rgba(56, 189, 248, .58) !important; }
+        .metric-tile { background: rgba(15, 23, 42, .55); border: 1px solid rgba(51, 65, 85, .72); border-radius: 8px; padding: .7rem .8rem; }
+        .toolbar-button { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; min-height: 2.25rem; }
         @media (min-width: 1024px) {
             .sticky-sidebar { position: sticky; top: 5rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
         }
@@ -23,14 +26,14 @@
         .history-scroll::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 4px; }
     </style>
 </head>
-<body id="app-body" class="min-h-screen pb-12 bg-slate-950 text-slate-100" style="background: radial-gradient(circle at top left, rgba(14,165,233,.16), transparent 34%), linear-gradient(180deg, #07111f 0%, #0f172a 42%, #111827 100%);">
+<body id="app-body" class="min-h-screen pb-12 bg-slate-950 text-slate-100" style="background: linear-gradient(180deg, #0b1120 0%, #111827 52%, #0f172a 100%);">
 
     <!-- 顶部导航条 -->
     <header id="app-header" class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 px-3 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-3 shadow-lg transition-colors duration-300">
         <div class="flex items-center justify-between w-full sm:w-auto">
             <div class="flex items-center space-x-2">
                 <span class="text-xl sm:text-2xl">▣</span>
-                <h1 class="text-base sm:text-xl font-bold font-cyber tracking-wider truncate">MatchDesk AI</h1>
+                <h1 class="text-base sm:text-xl font-bold font-cyber truncate">MatchDesk AI</h1>
             </div>
             <div class="flex items-center gap-2 sm:hidden">
                 <button onclick="fetchData()" class="bg-slate-800 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg text-white font-bold">刷新</button>
@@ -45,8 +48,8 @@
             </div>
             <span id="sync-status" class="text-xs text-sky-400 font-mono font-bold hidden md:inline">● 就绪</span>
             <div class="hidden sm:flex items-center gap-2">
-                <button onclick="fetchData()" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">获取赛事</button>
-                <button onclick="openApiKeyModal()" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">🔑 API Key</button>
+                <button onclick="fetchData()" class="toolbar-button theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">获取赛事</button>
+                <button onclick="openApiKeyModal()" class="toolbar-button theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">API Key</button>
                 <button onclick="toggleTheme()" id="theme-toggle-btn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 cursor-pointer text-sm">☀️</button>
             </div>
         </div>
@@ -60,9 +63,10 @@
             <div class="theme-card bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl transition-colors duration-300">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b border-slate-800 pb-3 gap-2">
                     <h2 id="list-title" class="text-xs sm:text-base font-bold">盘口矩阵</h2>
-                    <span class="text-[10px] sm:text-xs bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/20 font-cyber">LIVE ODDS</span>
+                    <span id="source-badge" class="text-[10px] sm:text-xs bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/20 font-cyber">等待同步</span>
                 </div>
                 <div id="league-filter" class="flex flex-wrap gap-2 mb-4"></div>
+                <div id="match-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 text-xs"></div>
                 <div id="match-container" class="space-y-4">
                     <div class="text-center py-10 text-slate-400 text-xs">请点击上方“获取赛程”加载比赛数据...</div>
                 </div>
@@ -213,6 +217,9 @@
         let isDarkMode = true;
         let selectedLeagues = [];
         let workRange = 'today';
+        let currentDataSource = '';
+        let currentSourceQuality = '';
+        let fetchSequence = 0;
         const API_KEY_STORAGE = 'cyberSoccerApiKeys';
         const LEAGUE_PREFIX_RE = /^(?:竞彩足球|竞彩|北京单场|北单|胜平负|让球胜平负|英超|英冠|英甲|英乙|西甲|西乙|意甲|意乙|德甲|德乙|法甲|法乙|葡超|荷甲|比甲|瑞超|挪超|丹超|芬超|奥甲|苏超|欧冠|欧联|欧协联|欧洲杯|世预赛|世欧预|世南美预|亚洲杯|亚冠|亚冠精英|亚冠二级|日职联|日职乙|日职|日乙|日联杯|韩职|韩K联|澳超|美职足|美公开赛|巴甲|阿甲|墨超|中超|中甲|足协杯|解放者杯|南俱杯|世俱杯|国际赛|友谊赛)\s*/;
 
@@ -278,13 +285,21 @@
                 .filter(([, value]) => value)
                 .map(([key, value]) => `- ${key}: ${value}`)
                 .join('\n') || '- 暂无人工补充条件';
+            const isBd = String(oddsInfo.code || '').startsWith('北单') || currentMode === 'bd';
+            const selectedHasRang = oddsInfo.hasRang === true || oddsInfo.hasRang === 'true' || normalizeRangNum(oddsInfo.rangNum) !== '--';
+            const bdMarketName = selectedHasRang ? '北京单场让球胜平负' : '北京单场胜平负';
+            const oddsLines = isBd
+                ? [`盘口: ${bdMarketName}${selectedHasRang ? ` ${formatRangLabel(oddsInfo.rangNum || '--')} ${formatRangValue(oddsInfo.rangNum || '--')}` : ''}；${selectedHasRang ? '让主胜' : '主胜'} ${oddsInfo.s || '--'} / ${selectedHasRang ? '让平' : '平'} ${oddsInfo.p || '--'} / ${selectedHasRang ? '让客胜' : '客胜'} ${oddsInfo.f || '--'}`]
+                : [
+                    `标准胜平负: 主胜 ${oddsInfo.s || '--'} / 平 ${oddsInfo.p || '--'} / 客胜 ${oddsInfo.f || '--'}`,
+                    selectedHasRang ? `让球胜平负: ${formatRangLabel(oddsInfo.rangNum || '--')} ${formatRangValue(oddsInfo.rangNum || '--')}；让主胜 ${oddsInfo.rs || '--'} / 让平 ${oddsInfo.rp || '--'} / 让客胜 ${oddsInfo.rf || '--'}` : ''
+                ].filter(Boolean);
             return [
                 '你是一名职业足球赛前盘口分析师。请只基于我提供的数据和你能明确核验的常识分析，不要编造不存在的伤停、首发、阵型、天气、历史交锋。',
                 '',
                 `比赛: ${matchText}`,
                 `编号: ${oddsInfo.code || '未知'}`,
-                `赔率: 主胜 ${oddsInfo.s || '--'} / 平 ${oddsInfo.p || '--'} / 客胜 ${oddsInfo.f || '--'} / 让球 ${formatRangLabel(oddsInfo.rangNum || '0')} ${formatRangValue(oddsInfo.rangNum || '0')}`,
-                `让球盘: 让主胜 ${oddsInfo.rs || '--'} / 让平 ${oddsInfo.rp || '--'} / 让客胜 ${oddsInfo.rf || '--'}`,
+                ...oddsLines,
                 '',
                 '已知条件:',
                 factorLines,
@@ -313,17 +328,23 @@
             const matches = getMatchesByRange(range);
             if (!matches.length) return '';
             const rows = matches.map((m, index) => {
+                const isBd = String(m.code || '').startsWith('北单') || currentMode === 'bd';
                 const rangLabel = formatRangLabel(m.rangNum);
                 const rangValue = formatRangValue(m.rangNum);
+                const marketName = isBd && m.hasRang ? `北京单场让球胜平负（${rangLabel} ${rangValue}）` : (isBd ? '北京单场胜平负' : '标准胜平负');
+                const labels = isBd && m.hasRang ? ['让主胜', '让平', '让客胜'] : ['主胜', '平', '客胜'];
+                const rangLine = !isBd && m.hasRang
+                    ? `   让球胜平负: ${rangLabel} ${rangValue}；让主胜 ${m.rs || '--'} / 让平 ${m.rp || '--'} / 让客胜 ${m.rf || '--'}`
+                    : '';
                 return [
                     `${index + 1}. ${m.code || ''} ${m.league || ''} ${m.matchName}，开赛 ${m.matchTime || '--'}`,
-                    `   标准胜平负: 主胜 ${m.s} / 平 ${m.p} / 客胜 ${m.f}`,
-                    `   让球胜平负: ${rangLabel} ${rangValue}；让主胜 ${m.rs || '--'} / 让平 ${m.rp || '--'} / 让客胜 ${m.rf || '--'}`
-                ].join('\n');
-            }).join('\n');
+                    `   ${marketName}: ${labels[0]} ${m.s} / ${labels[1]} ${m.p} / ${labels[2]} ${m.f}`,
+                    rangLine
+                ].filter(Boolean).join('\n');
+            }).join('\n\n');
             const rangeLabel = getRangeLabel(range);
             return [
-                `你是一名职业足球赛前盘口分析师。下面是我从页面提取的${rangeLabel}赛事、标准胜平负赔率和让球胜平负赔率。`,
+                `你是一名职业足球赛前盘口分析师。下面是我从页面提取的${rangeLabel}赛事盘口。竞彩通常同时包含标准胜平负和让球胜平负；北京单场每场只按页面当前开售的一种盘口分析。`,
                 '',
                 '重要要求:',
                 '1. 只基于我提供的盘口、球队、时间做初筛，不要编造伤停、首发、天气、历史交锋。',
@@ -462,7 +483,7 @@
                 inputs.forEach(i => { i.style.backgroundColor = "#ffffff"; i.style.borderColor = "#cbd5e1"; i.style.color = "#0f172a"; });
                 subs.forEach(s => { s.style.backgroundColor = "#e2e8f0"; s.style.color = "#0f172a"; s.style.borderColor = "#cbd5e1"; });
             } else {
-                body.style.background = "linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e1b4b 100%)";
+                body.style.background = "linear-gradient(180deg, #0b1120 0%, #111827 52%, #0f172a 100%)";
                 body.style.color = "#f8fafc";
                 header.style.backgroundColor = "rgba(15, 23, 42, 0.9)";
                 header.style.borderColor = "#1e293b";
@@ -476,36 +497,55 @@
         function switchTab(mode) {
             if (currentMode === mode) return;
             currentMode = mode;
+            fetchSequence++;
             document.getElementById('tab-jc').className = mode === 'jc' ? "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition bg-sky-600 text-white shadow-xs cursor-pointer" : "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition text-slate-400 hover:text-white cursor-pointer";
             document.getElementById('tab-bd').className = mode === 'bd' ? "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition bg-sky-600 text-white shadow-xs cursor-pointer" : "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition text-slate-400 hover:text-white cursor-pointer";
             document.getElementById('list-title').innerText = mode === 'jc' ? "📊 竞彩足球盘口映射" : "📊 北京单场盘口映射";
             historyLogs = [];
+            globalMatchData = [];
+            batchPredictionLogs = [];
             selectedLeagues = [];
             renderHistoryLogs();
             document.getElementById('matchInput').value = '';
             document.getElementById('resultBox').classList.add('hidden');
+            document.getElementById('league-filter').innerHTML = '';
+            document.getElementById('match-container').innerHTML = `<div class="text-center py-10 text-slate-400 text-xs">${mode === 'jc' ? '已切换到竞彩足球，正在重新获取赛事...' : '已切换到北京单场，正在重新获取赛事...'}</div>`;
+            currentDataSource = '';
+            currentSourceQuality = '';
+            renderMatchSummary();
             fetchData();
         }
 
         async function fetchData() {
+            const requestMode = currentMode;
+            const requestId = ++fetchSequence;
             const container = document.getElementById('match-container');
             const statusText = document.getElementById('sync-status');
             setWorkflowStatus('正在获取赛程');
             statusText.innerText = "● 同步中...";
+            globalMatchData = [];
+            selectedLeagues = [];
+            currentDataSource = '';
+            currentSourceQuality = '';
+            document.getElementById('league-filter').innerHTML = '';
+            renderMatchSummary();
             container.innerHTML = `<div class="text-center py-10 text-sky-400 text-xs font-bold animate-pulse">正在获取真实盘口与赛事数据...</div>`;
-            const endpoint = currentMode === 'jc' ? '/api/matches/source-new' : '/api/matches/beidan';
+            const endpoint = requestMode === 'jc' ? '/api/matches/source-new' : '/api/matches/beidan';
 
             try {
                 const res = await fetch(endpoint);
                 const json = await res.json();
+                if (requestId !== fetchSequence || requestMode !== currentMode) return;
                 if (!json.success) {
                     statusText.innerText = "● 获取失败";
-                    setWorkflowStatus(currentMode === 'bd' ? '北单获取失败' : '赛程获取失败');
+                    setWorkflowStatus(requestMode === 'bd' ? '北单获取失败' : '赛程获取失败');
                     container.innerHTML = `<div class="text-center py-10 text-rose-400 text-xs font-bold px-4">${json.message || '数据源暂不可用'}</div>`;
                     return;
                 }
                 if (json && json.matchList) {
                     statusText.innerText = "● 就绪";
+                    currentDataSource = json.source || endpoint;
+                    currentSourceQuality = json.quality || '';
                     globalMatchData = [];
                     let html = '';
                     const uniqueMap = new Map();
@@ -550,7 +590,7 @@
                         const codeMatch = rawText.match(/((?:周[一-日]\d+)|(?:\d{3})|(?:北单\d+))/);
                         if (matchItem.code) matchCode = matchItem.code;
                         else if (codeMatch) matchCode = codeMatch[1];
-                        else matchCode = currentMode === 'bd' ? `北单${String(indexCounter).padStart(3, '0')}` : `JC${String(indexCounter).padStart(3, '0')}`;
+                        else matchCode = requestMode === 'bd' ? `北单${String(indexCounter).padStart(3, '0')}` : `JC${String(indexCounter).padStart(3, '0')}`;
                         matchCode = normalizeMatchCode(matchCode);
 
                         let cleanName = matchItem.matchName || cleanMatchNameFromRaw(rawText, timeTag);
@@ -562,33 +602,33 @@
                         const cardBg = !isDarkMode ? "background-color: rgba(255, 255, 255, 0.95); border-color: #cbd5e1; color: #0f172a;" : "background-color: rgba(30, 41, 59, 0.75); border-color: rgba(51, 65, 85, 0.7); color: #f8fafc;";
                         const boxBg = !isDarkMode ? "background-color: #f8fafc; border-color: #e2e8f0; color: #334155;" : "background-color: rgba(30, 41, 59, 0.6); border-color: rgba(51, 65, 85, 0.8); color: #cbd5e1;";
 
-                        // 恢复并渲染双盘口（标准胜平负 + 让球胜平负）
-                        let gridHtml = `
-                            <div class="space-y-2 font-mono text-xs">
-                                <div class="space-y-1">
-                                    <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
-                                        <span>【标准胜平负盘】</span>
-                                        <span class="text-[9px] text-slate-500">主 / 平 / 客</span>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-1.5 text-center">
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">主胜</div><div class="font-bold">${s}</div></div>
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">平局</div><div class="text-sky-400 font-bold">${p}</div></div>
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">客胜</div><div class="text-rose-400 font-bold">${f}</div></div>
-                                    </div>
+                        const baseGrid = `
+                            <div class="space-y-1">
+                                <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
+                                    <span>【标准胜平负盘】</span>
+                                    <span class="text-[9px] text-slate-500">主 / 平 / 客</span>
                                 </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
-                                        <span>【让球胜平负盘 (${formatRangLabel(rangNum)})】 <b class="${getRangBadgeClass(rangNum)} px-1.5 py-0.5 rounded border">${rangValue}</b></span>
-                                        <span class="text-[9px] text-purple-400 font-semibold">让球网格</span>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-1.5 text-center">
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让主胜</div><div class="font-bold">${rs}</div></div>
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让平</div><div class="text-sky-400 font-bold">${rp}</div></div>
-                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让客胜</div><div class="text-rose-400 font-bold">${rf}</div></div>
-                                    </div>
+                                <div class="grid grid-cols-3 gap-1.5 text-center">
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">主胜</div><div class="font-bold">${s}</div></div>
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">平局</div><div class="text-sky-400 font-bold">${p}</div></div>
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">客胜</div><div class="text-rose-400 font-bold">${f}</div></div>
                                 </div>
-                            </div>
-                        `;
+                            </div>`;
+                        const rangGrid = `
+                            <div class="space-y-1">
+                                <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
+                                    <span>【让球胜平负盘 (${formatRangLabel(rangNum)})】 <b class="${getRangBadgeClass(rangNum)} px-1.5 py-0.5 rounded border">${rangValue}</b></span>
+                                    <span class="text-[9px] text-purple-400 font-semibold">让球网格</span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-1.5 text-center">
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让主胜</div><div class="font-bold">${requestMode === 'bd' ? s : rs}</div></div>
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让平</div><div class="text-sky-400 font-bold">${requestMode === 'bd' ? p : rp}</div></div>
+                                    <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让客胜</div><div class="text-rose-400 font-bold">${requestMode === 'bd' ? f : rf}</div></div>
+                                </div>
+                            </div>`;
+                        let gridHtml = `<div class="space-y-2 font-mono text-xs">${
+                            requestMode === 'bd' ? (hasRang ? rangGrid : baseGrid) : `${baseGrid}${hasRang ? rangGrid : ''}`
+                        }</div>`;
 
                         html += `
                             <div class="match-card p-3 sm:p-4 rounded-xl transition-all space-y-3 shadow-xs border" style="${cardBg}"
@@ -611,6 +651,7 @@
                     renderLeagueFilter();
                     container.innerHTML = html || `<div class="text-center py-10 text-amber-300 text-xs font-bold px-4">已连接数据源，但没有解析到可展示的赛事。</div>`;
                     applyLeagueFilter();
+                    renderMatchSummary();
                     setWorkflowStatus(`已获取 ${globalMatchData.length} 场，${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
 
                     document.querySelectorAll('.btn-ai-select').forEach(btn => {
@@ -621,18 +662,20 @@
                             const s = card.getAttribute('data-s');
                             const p = card.getAttribute('data-p');
                             const f = card.getAttribute('data-f');
+                            const hasRang = card.getAttribute('data-hasrang') === 'true';
                             const rangNum = card.getAttribute('data-rangnum');
                             const rs = card.getAttribute('data-rs');
                             const rp = card.getAttribute('data-rp');
                             const rf = card.getAttribute('data-rf');
                             const matchTime = card.getAttribute('data-time');
 
-                            document.getElementById('matchInput').value = `[${currentMode.toUpperCase()}] ${matchName} | 开赛:${matchTime}`;
-                            window.currentMatchOdds = { s, p, f, code: matchCode, rangNum, rs, rp, rf, matchName, matchTime };
+                            document.getElementById('matchInput').value = `[${requestMode.toUpperCase()}] ${matchName} | 开赛:${matchTime}`;
+                            window.currentMatchOdds = { s, p, f, code: matchCode, hasRang, rangNum, rs, rp, rf, matchName, matchTime };
                         });
                     });
                 }
             } catch (err) {
+                if (requestId !== fetchSequence || requestMode !== currentMode) return;
                 setWorkflowStatus('赛程获取失败');
                 container.innerHTML = `<div class="text-center py-10 text-rose-400 text-xs font-bold">连接服务异常</div>`;
             }
@@ -719,8 +762,9 @@
         function normalizeKnownLeagueName(value) {
             const text = String(value || '').trim();
             const aliases = [
-                ['韩K', '韩职'], ['K联赛', '韩职'], ['韩职联', '韩职'],
-                ['日职', '日职联'], ['J联赛', '日职联'], ['日乙', '日职乙'],
+                ['韩K联', '韩职'], ['韩职联', '韩职'], ['K联赛', '韩职'], ['韩K', '韩职'],
+                ['日职乙', '日职乙'], ['日乙', '日职乙'], ['J2联赛', '日职乙'],
+                ['日职联', '日职联'], ['J1联赛', '日职联'], ['J联赛', '日职联'], ['日职', '日职联'],
                 ['美大联盟', '美职足'], ['美职联', '美职足'], ['MLS', '美职足'],
                 ['欧罗巴', '欧联'], ['欧洲联赛', '欧联'],
                 ['欧会杯', '欧协联'], ['欧洲协会联赛', '欧协联'],
@@ -746,6 +790,37 @@
             box.innerHTML = `${allBtn}${leagueBtns}<span class="text-[10px] text-slate-500 self-center">可多选</span>`;
         }
 
+        function renderMatchSummary() {
+            const box = document.getElementById('match-summary');
+            const badge = document.getElementById('source-badge');
+            if (!box) return;
+            const total = globalMatchData.length;
+            const today = getMatchesByRange('today').length;
+            const tomorrow = getMatchesByRange('tomorrow').length;
+            const selected = getMatchesByRange(workRange).length;
+            const sourceLabel = currentDataSource ? compactSourceName(currentDataSource) : '未同步';
+            const qualityLabel = currentSourceQuality ? ` / ${currentSourceQuality}` : '';
+            if (badge) badge.innerText = currentDataSource ? `${sourceLabel}${qualityLabel}` : '等待同步';
+            box.innerHTML = [
+                metricTile('总场次', total),
+                metricTile('今日', today),
+                metricTile('明日', tomorrow),
+                metricTile('当前范围', selected)
+            ].join('');
+        }
+
+        function metricTile(label, value) {
+            return `<div class="metric-tile"><div class="text-[10px] text-slate-400 font-bold">${label}</div><div class="text-lg font-bold text-slate-100 leading-tight">${value}</div></div>`;
+        }
+
+        function compactSourceName(source) {
+            const text = String(source || '');
+            if (text.includes('500star')) return '500 表格源';
+            if (text.includes('sporttery')) return '竞彩网';
+            if (text.includes('spftll')) return '页面兜底源';
+            return '本地接口';
+        }
+
         function setLeagueFilter(league) {
             if (league === '全部') {
                 selectedLeagues = [];
@@ -756,6 +831,7 @@
             }
             renderLeagueFilter();
             applyLeagueFilter();
+            renderMatchSummary();
             setWorkflowStatus(`${getLeagueFilterLabel()} / ${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
         }
 
@@ -775,6 +851,7 @@
                     : 'work-range-btn text-slate-300 hover:text-white font-bold py-2 rounded-md';
             });
             setWorkflowStatus(`${getLeagueFilterLabel()} / ${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
+            renderMatchSummary();
         }
 
         function getLeagueFilterLabel() {

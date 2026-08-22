@@ -71,13 +71,18 @@ app.get('/api/matches/source-new', async (req, res) => {
 });
 
 app.get('/api/matches/beidan', async (req, res) => {
+    const backup = await fetch500StarBeidan();
+    if (backup.length) {
+        return res.json({ success: true, source: 'https://zx.500star.com/zqdc/shuju.php', quality: 'table', matchList: validateBeidanMatches(backup) });
+    }
+
     const urls = [
-        'https://xx.spftll.cn/#/jc/dpfas1/?tabindex=2',
         'https://www.sporttery.cn/jc/zqdc/',
         'https://www.sporttery.cn/bjdc/',
         'https://www.sporttery.cn/bd/',
         'https://live.500star.com/zqdc.php',
-        'http://live.500star.com/zqdc.php'
+        'http://live.500star.com/zqdc.php',
+        'https://xx.spftll.cn/#/jc/dpfas1/?tabindex=2'
     ];
     let browser = null;
     const errors = [];
@@ -90,20 +95,24 @@ app.get('/api/matches/beidan', async (req, res) => {
             try {
                 await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
                 await new Promise(r => setTimeout(r, url.includes('xx.spftll.cn') ? 5000 : 3500));
-                const rawMatches = await page.evaluate(() => {
+                const pageRows = await page.evaluate(() => {
                     const rows = [];
-                    document.querySelectorAll('tr, li, div, span, p').forEach(n => {
+                    document.querySelectorAll('tr, li, div, p').forEach(n => {
                         const txt = (n.innerText || '').replace(/\s+/g, ' ').trim();
-                        if ((txt.includes('VS') || txt.includes('vs') || /北单|北京单场|胜平负|让球/.test(txt)) && /\b\d+\.\d{2}\b/.test(txt) && txt.length > 15 && txt.length < 320) {
-                            rows.push(txt);
+                        const cells = Array.from(n.querySelectorAll('th,td,span')).map(x => (x.innerText || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+                        if ((txt.includes('VS') || txt.includes('vs') || /北单|北京单场|胜平负|让球/.test(txt)) && /\b\d+\.\d{2}\b/.test(txt) && txt.length > 15 && txt.length < 360) {
+                            rows.push({ text: txt, cells });
                         }
                     });
                     return rows;
                 });
-                const parsed = url.includes('live.500star.com') ? parse500LiveRows(rawMatches) : normalizeRawMatchList(rawMatches, 'bd');
+                const rawMatches = pageRows.map(row => row.text);
+                const parsed = validateBeidanMatches(
+                    url.includes('live.500star.com') ? parse500LiveRows(rawMatches) : parseBrowserBeidanRows(pageRows)
+                );
                 if (parsed.length) {
                     await browser.close();
-                    return res.json({ success: true, source: url, matchList: parsed });
+                    return res.json({ success: true, source: url, quality: parsed.length >= 8 ? 'structured' : 'fallback', matchList: parsed });
                 }
                 errors.push(`${url}: 未识别到北单盘口行`);
             } catch (e) {
@@ -111,11 +120,6 @@ app.get('/api/matches/beidan', async (req, res) => {
             }
         }
 
-        const backup = await fetch500StarBeidan();
-        if (backup.length) {
-            await browser.close();
-            return res.json({ success: true, source: 'https://zx.500star.com/zqdc/shuju.php', matchList: backup });
-        }
         errors.push('500彩票网赛事数据页: 未解析到可用表格行');
 
         await browser.close();
@@ -138,6 +142,58 @@ async function fetch500StarBeidan() {
     }
 }
 
+function parseBrowserBeidanRows(pageRows) {
+    const structured = [];
+    pageRows.forEach((row, index) => {
+        const cells = Array.isArray(row.cells) ? row.cells.filter(Boolean) : [];
+        const parsed = parseBeidanCells(cells, index + 1);
+        if (parsed) structured.push(parsed);
+    });
+    if (structured.length) return normalizeBeidanMatchList(structured);
+    return normalizeRawMatchList(pageRows.map(row => row.text), 'bd');
+}
+
+function parseBeidanCells(cells, index) {
+    if (cells.length < 5) return null;
+    const joined = cells.join(' ');
+    const odds = cells.filter(c => /^\d+\.\d{2}$/.test(c));
+    if (odds.length < 3) return null;
+    const timeIndex = cells.findIndex(c => /(?:\d{2}-\d{2}\s+)?\d{1,2}:\d{2}/.test(c));
+    const vsIndex = cells.findIndex(c => /^(?:VS|vs|V|v|对)$/.test(c));
+    let home = '';
+    let away = '';
+    if (vsIndex > 0 && vsIndex < cells.length - 1) {
+        home = cells[vsIndex - 1];
+        away = cells[vsIndex + 1];
+    } else if (timeIndex >= 0) {
+        home = cells[timeIndex + 1] || '';
+        away = cells[timeIndex + 3] || cells[timeIndex + 2] || '';
+    }
+    home = cleanTeamName(home);
+    away = cleanTeamName(away);
+    if (!home || !away || home === away || /赔率|胜平负|让球/.test(`${home}${away}`)) return null;
+    const code = normalizeMatchCode(cells.find(c => /^(?:北单)?\d{1,3}$/.test(c)) || `北单${String(index).padStart(3, '0')}`, 'bd');
+    const time = timeIndex >= 0 ? cells[timeIndex].replace(/^\d{2}-\d{2}\s+/, '') : '今日 20:00';
+    const league = normalizeLeagueName(cells[Math.max(0, timeIndex - 1)] || cells[0] || '其他');
+    const rangInfo = parseRangInfo(joined);
+    const lastOdds = odds.slice(-3);
+    return {
+        raw: `${league} ${code} ${time} ${home} VS ${away} ${rangInfo.hasRang ? `让球 ${rangInfo.rangNum}` : '胜平负'} ${lastOdds.join(' ')}`,
+        league,
+        code,
+        matchName: `${home} VS ${away}`,
+        matchTime: time,
+        s: lastOdds[0],
+        p: lastOdds[1],
+        f: lastOdds[2],
+        hasRang: rangInfo.hasRang,
+        rangNum: rangInfo.rangNum,
+        rs: '--',
+        rp: '--',
+        rf: '--'
+    };
+}
+
 function parse500StarBeidanHtml(html) {
     const rows = [...String(html || '').matchAll(/<tr[\s\S]*?<\/tr>/gi)];
     const list = [];
@@ -156,7 +212,7 @@ function parse500StarBeidanHtml(html) {
         const odds = cells.slice(timeCellIndex + 4).filter(c => /^\d+\.\d{2}$/.test(c));
         if (!home || !away || odds.length < 3) return;
         list.push({
-            raw: `${league} 北单${String(index + 1).padStart(3, '0')} ${matchTime} ${home} VS ${away} 让球 ${rangNum} ${odds.slice(-3).join(' ')}`,
+            raw: `${league} 北单${String(list.length + 1).padStart(3, '0')} ${matchTime} ${home} VS ${away} ${rangNum !== '--' ? `让球 ${rangNum}` : '胜平负'} ${odds.slice(-3).join(' ')}`,
             league: normalizeLeagueName(league),
             code: `北单${String(list.length + 1).padStart(3, '0')}`,
             matchName: `${home} VS ${away}`,
@@ -190,6 +246,63 @@ function normalizeRawMatchList(rawMatches, mode) {
         if (!existing || String(parsed.raw).length > String(existing.raw).length) map.set(key, parsed);
     });
     return [...map.values()];
+}
+
+function normalizeBeidanMatchList(matches) {
+    const map = new Map();
+    matches.forEach(match => {
+        if (!isValidBeidanMatch(match)) return;
+        const key = normalizeTeamPairKey(match.matchName);
+        const existing = map.get(key);
+        if (!existing || scoreBeidanMatch(match) > scoreBeidanMatch(existing)) map.set(key, match);
+    });
+    return [...map.values()].sort((a, b) => extractCodeNumber(a.code) - extractCodeNumber(b.code));
+}
+
+function validateBeidanMatches(matches) {
+    return normalizeBeidanMatchList(matches).map((match, index) => ({
+        ...match,
+        code: match.code && /^北单\d{3}$/.test(match.code) ? match.code : `北单${String(index + 1).padStart(3, '0')}`
+    }));
+}
+
+function isValidBeidanMatch(match) {
+    if (!match || !match.matchName || !/\sVS\s/.test(match.matchName)) return false;
+    if (![match.s, match.p, match.f].every(isValidOdd)) return false;
+    if (!/(?:周[一-日]\s*)?\d{1,2}:\d{2}/.test(String(match.matchTime || ''))) return false;
+    const [home, away] = match.matchName.split(/\s+VS\s+/);
+    if (!home || !away || home === away) return false;
+    if (isBadTeamFragment(home) || isBadTeamFragment(away)) return false;
+    return true;
+}
+
+function isBadTeamFragment(value) {
+    const text = String(value || '').trim();
+    return !text || /^\d/.test(text) || /(?:胜平负|让球|赔率|主胜|客胜|让主胜|让客胜|让平)/.test(text);
+}
+
+function isValidOdd(value) {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) && n >= 1.01 && n <= 99;
+}
+
+function normalizeTeamPairKey(matchName) {
+    return String(matchName || '').replace(/\s+VS\s+/i, 'vs').replace(/\s+/g, '').toLowerCase();
+}
+
+function scoreBeidanMatch(match) {
+    return [
+        /^北单\d{3}$/.test(match.code || '') ? 4 : 0,
+        /^\d{1,2}:\d{2}$/.test(match.matchTime || '') ? 3 : 0,
+        match.league && match.league !== '其他' ? 2 : 0,
+        match.hasRang ? 1 : 0,
+        String(match.raw || '').length > 20 ? 1 : 0
+    ].reduce((sum, n) => sum + n, 0);
+}
+
+function extractCodeNumber(code) {
+    const n = Number.parseInt(String(code || '').match(/\d+/)?.[0] || '999', 10);
+    return Number.isFinite(n) ? n : 999;
 }
 
 function parse500LiveRows(rawMatches) {
@@ -240,7 +353,7 @@ function parseRawOddsText(rawText, mode = 'jc', index = 1) {
         league: extractLeagueNameFromRaw(raw),
         code: normalizeMatchCode(codeMatch ? codeMatch[1] : (bdCodeMatch ? bdCodeMatch[1] : (mode === 'bd' ? `北单${String(index).padStart(3, '0')}` : `JC${String(index).padStart(3, '0')}`)), mode),
         matchName: cleanRawMatchName(raw, timeMatch?.[0]),
-        matchTime: timeMatch?.[0] || '今日 20:00',
+        matchTime: timeMatch?.[0] || (mode === 'bd' ? '' : '今日 20:00'),
         s: odds[0] || '2.00',
         p: odds[1] || '3.00',
         f: odds[2] || '3.00',
@@ -281,8 +394,9 @@ function isBadLeagueName(value) {
 function normalizeKnownLeagueName(value) {
     const text = String(value || '').trim();
     const aliases = [
-        ['韩K', '韩职'], ['K联赛', '韩职'], ['韩职联', '韩职'],
-        ['日职', '日职联'], ['J联赛', '日职联'], ['日乙', '日职乙'],
+        ['韩K联', '韩职'], ['韩职联', '韩职'], ['K联赛', '韩职'], ['韩K', '韩职'],
+        ['日职乙', '日职乙'], ['日乙', '日职乙'], ['J2联赛', '日职乙'],
+        ['日职联', '日职联'], ['J1联赛', '日职联'], ['J联赛', '日职联'], ['日职', '日职联'],
         ['美大联盟', '美职足'], ['美职联', '美职足'], ['MLS', '美职足'],
         ['欧罗巴', '欧联'], ['欧洲联赛', '欧联'],
         ['欧会杯', '欧协联'], ['欧洲协会联赛', '欧协联'],
