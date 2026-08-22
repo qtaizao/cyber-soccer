@@ -1,0 +1,13 @@
+unpackage/cache/
+unpackage/debug/
+unpackage/dist/
+unpackage/release/
+unpackage/resources/
+unpackage/logs/
+.git/*
+.hbuilderx/*
+node_modules/
+.project
+.DS_Store
+.history
+.idea/*
