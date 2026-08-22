@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyber Soccer Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap');
+        :root { color-scheme: dark; }
+        body { font-family: 'Noto Sans SC', sans-serif; min-height: 100vh; transition: background 0.3s ease, color 0.3s ease; -webkit-tap-highlight-color: transparent; letter-spacing: 0; }
+        .font-cyber { font-family: 'Orbitron', sans-serif; }
+        .theme-card, .match-card { border-radius: 8px !important; }
+        .theme-btn-sub, button, input, textarea, details, .custom-box { border-radius: 8px !important; }
+        .match-card { position: relative; overflow: hidden; }
+        .match-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0ea5e9, #22c55e, #f59e0b); opacity: .85; }
+        .match-card:hover { transform: translateY(-1px); border-color: rgba(14, 165, 233, .65) !important; }
+        @media (min-width: 1024px) {
+            .sticky-sidebar { position: sticky; top: 5rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
+        }
+        .history-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+        .history-scroll::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 4px; }
+    </style>
+</head>
+<body id="app-body" class="min-h-screen pb-12 bg-slate-950 text-slate-100" style="background: radial-gradient(circle at top left, rgba(14,165,233,.16), transparent 34%), linear-gradient(180deg, #07111f 0%, #0f172a 42%, #111827 100%);">
+
+    <!-- 顶部导航条 -->
+    <header id="app-header" class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 px-3 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-3 shadow-lg transition-colors duration-300">
+        <div class="flex items-center justify-between w-full sm:w-auto">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl sm:text-2xl">▣</span>
+                <h1 class="text-base sm:text-xl font-bold font-cyber tracking-wider truncate">MatchDesk AI</h1>
+            </div>
+            <div class="flex items-center gap-2 sm:hidden">
+                <button onclick="fetchData()" class="bg-slate-800 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg text-white font-bold">刷新</button>
+                <button onclick="toggleTheme()" id="theme-toggle-btn-mobile" class="p-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm">☀️</button>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between sm:justify-end w-full sm:w-auto gap-2 text-xs">
+            <div class="bg-slate-800/80 p-1 rounded-lg border border-slate-700 flex shadow-inner">
+                <button id="tab-jc" onclick="switchTab('jc')" class="px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition bg-sky-600 text-white shadow-xs cursor-pointer">竞彩足球</button>
+                <button id="tab-bd" onclick="switchTab('bd')" class="px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition text-slate-400 hover:text-white cursor-pointer">北京单场</button>
+            </div>
+            <span id="sync-status" class="text-xs text-sky-400 font-mono font-bold hidden md:inline">● 就绪</span>
+            <div class="hidden sm:flex items-center gap-2">
+                <button onclick="fetchData()" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">获取赛事</button>
+                <button onclick="openApiKeyModal()" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-white shadow-sm cursor-pointer">🔑 API Key</button>
+                <button onclick="toggleTheme()" id="theme-toggle-btn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 cursor-pointer text-sm">☀️</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体网格 -->
+    <main class="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+        
+        <!-- 左侧赛程列表区 -->
+        <section class="lg:col-span-2 space-y-6">
+            <div class="theme-card bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl transition-colors duration-300">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 border-b border-slate-800 pb-3 gap-2">
+                    <h2 id="list-title" class="text-xs sm:text-base font-bold">盘口矩阵</h2>
+                    <span class="text-[10px] sm:text-xs bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/20 font-cyber">LIVE ODDS</span>
+                </div>
+                <div id="league-filter" class="flex flex-wrap gap-2 mb-4"></div>
+                <div id="match-container" class="space-y-4">
+                    <div class="text-center py-10 text-slate-400 text-xs">请点击上方“获取赛程”加载比赛数据...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右侧控制面板与多维推演区 -->
+        <section class="space-y-6 sticky-sidebar">
+            <div class="theme-card bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl transition-colors duration-300">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <h2 class="text-sm sm:text-lg font-bold flex items-center gap-2"><span>🧭</span> 今日测算工作台</h2>
+                    <span id="workflowStatus" class="text-[10px] text-slate-400 font-mono">等待获取赛程</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="grid grid-cols-3 gap-1.5 bg-slate-800/35 border border-slate-700/60 p-1 rounded-lg text-[11px]">
+                        <button id="range-today" onclick="setWorkRange('today')" class="work-range-btn bg-sky-600 text-white font-bold py-2 rounded-md">今日</button>
+                        <button id="range-tomorrow" onclick="setWorkRange('tomorrow')" class="work-range-btn text-slate-300 hover:text-white font-bold py-2 rounded-md">明日</button>
+                        <button id="range-all" onclick="setWorkRange('all')" class="work-range-btn text-slate-300 hover:text-white font-bold py-2 rounded-md">全部</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="fetchData()" class="bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-lg transition text-xs cursor-pointer shadow-md">1 获取赛事</button>
+                        <button onclick="runBatchLocalPrediction()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg transition text-xs cursor-pointer shadow-md">2 测算所选范围</button>
+                        <button onclick="copyTodayAiPrompt()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition text-xs cursor-pointer shadow-md">3 复制所选范围</button>
+                        <button onclick="reviewBatchAiResult()" class="bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-lg transition text-xs cursor-pointer shadow-md">4 粘贴后校验</button>
+                    </div>
+
+                    <textarea id="aiPasteInput" rows="6" placeholder="把网页AI返回的整批分析结果粘贴到这里，然后点“4 粘贴后校验”" class="theme-input w-full bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500 resize-y"></textarea>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button onclick="openWebAiAssistant('deepseek')" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-bold py-2 rounded-lg transition text-xs cursor-pointer">打开 DeepSeek 网页</button>
+                        <button onclick="openWebAiAssistant('chatgpt')" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-bold py-2 rounded-lg transition text-xs cursor-pointer">打开 ChatGPT 网页</button>
+                    </div>
+
+                    <details class="bg-slate-800/35 border border-slate-700/60 rounded-lg p-3 text-xs">
+                        <summary class="cursor-pointer font-bold text-slate-200">高级/单场工具</summary>
+                        <div class="space-y-3 pt-3">
+                            <input id="matchInput" type="text" placeholder="点击左侧赛事可选择单场" class="theme-input w-full bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-sky-500 shadow-inner" readonly>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input id="factorVenueCity" type="text" placeholder="主场城市" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorInjuries" type="text" placeholder="球员伤停" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorWeather" type="text" placeholder="天气场地" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorFormation" type="text" placeholder="战术阵型" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorPsychology" type="text" placeholder="心理战意" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorRecentForm" type="text" placeholder="近期战绩" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorH2H" type="text" placeholder="历史交锋" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                                <input id="factorFutureSchedule" type="text" placeholder="未来赛程/体能" class="theme-input bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 bg-slate-800/40 p-3 rounded-lg border border-slate-700/60">
+                                <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" id="useDeepSeek" class="accent-sky-500 w-4 h-4"> DeepSeek API</label>
+                                <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" id="useChatGPT" class="accent-sky-500 w-4 h-4"> ChatGPT API</label>
+                                <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" checked id="useMarketBase" class="accent-sky-500 w-4 h-4"> 赔率基准</label>
+                                <label class="flex items-center gap-2 cursor-pointer py-0.5"><input type="checkbox" checked id="useBagua" class="accent-sky-500 w-4 h-4"> 梅花易数</label>
+                            </div>
+
+                            <button onclick="generateConsensusPrediction()" class="w-full bg-gradient-to-r from-sky-600 to-purple-600 hover:from-sky-500 hover:to-purple-500 text-white font-bold py-2.5 rounded-lg transition text-xs cursor-pointer shadow-md">单场详细测算</button>
+                            <button onclick="reviewPastedAiResult()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-lg transition text-xs cursor-pointer shadow-md">单场粘贴AI结果复盘</button>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- 结果展示区 -->
+                <div id="resultBox" class="mt-6 hidden theme-box bg-slate-800/60 border border-slate-700/80 p-3 sm:p-4 rounded-xl text-xs space-y-3 font-mono shadow-inner overflow-x-auto">
+                    <div class="font-bold border-b border-slate-700/60 pb-1.5 flex justify-between items-center">
+                        <span class="truncate">【资本盘口与多比分解构】</span>
+                        <span class="text-[10px] text-purple-400 font-cyber">RESULT</span>
+                    </div>
+                    <div id="capitalResult" class="space-y-1 text-amber-300 font-bold"></div>
+                    <div id="deepseekResult" class="space-y-1 text-purple-300 pt-1 border-t border-slate-700/40"></div>
+                    <div id="chatgptResult" class="space-y-1 text-emerald-300 pt-1 border-t border-slate-700/40"></div>
+                    <div id="marketBaseResult" class="space-y-1 text-amber-200 pt-1 border-t border-slate-700/40"></div>
+                    <div id="guaResult" class="space-y-1 text-indigo-300 pt-1 border-t border-slate-700/40"></div>
+                    
+                    <div id="scoreResult" class="pt-2 border-t border-slate-700/60"></div>
+                    <div id="reviewResult" class="pt-2 border-t border-slate-700/60"></div>
+                </div>
+            </div>
+
+            <!-- 历史日志模块 -->
+            <div class="theme-card bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl transition-colors duration-300">
+                <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
+                    <h2 class="text-xs sm:text-sm font-bold flex items-center gap-2 font-cyber"><span>📜</span> 历史测算日志</h2>
+                    <div class="flex items-center gap-2">
+                        <span id="history-count" class="text-[10px] text-slate-400 font-mono">0 条记录</span>
+                        <button onclick="openHistoryModal()" class="bg-sky-500/10 text-sky-400 text-[10px] px-2.5 py-1 rounded border border-sky-500/20 transition cursor-pointer font-semibold">查看全部</button>
+                    </div>
+                </div>
+                <div id="historyContainer" class="space-y-3 max-h-56 overflow-y-auto history-scroll pr-1 text-xs font-mono">
+                    <div class="text-center py-6 text-slate-400 text-[11px]">暂无历史推演日志...</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- API Key 设置弹窗 -->
+    <div id="apiKeyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="theme-card bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full shadow-2xl">
+            <div class="flex justify-between items-center p-4 sm:p-5 border-b border-slate-800">
+                <h3 class="text-sm sm:text-base font-bold flex items-center gap-2 font-cyber"><span>🔑</span> API Key 设置</h3>
+                <button onclick="closeApiKeyModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 cursor-pointer">✕</button>
+            </div>
+            <div class="p-4 sm:p-5 space-y-4 text-xs">
+                <div class="space-y-2">
+                    <label class="block text-slate-300 font-bold">DeepSeek API Key</label>
+                    <input id="deepseekApiKeyInput" type="password" placeholder="sk-..." class="theme-input w-full bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-slate-300 font-bold">ChatGPT / OpenAI API Key</label>
+                    <input id="chatgptApiKeyInput" type="password" placeholder="sk-proj-..." class="theme-input w-full bg-slate-800/60 border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="text-[11px] text-slate-400 leading-relaxed">
+                    Key 只保存在当前浏览器本地，用于请求本机后端，不会写入代码文件。公共电脑请用完后清除。
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button onclick="saveApiKeys()" class="bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 rounded-lg transition cursor-pointer flex-1">保存</button>
+                    <button onclick="clearApiKeys()" class="bg-rose-600/90 hover:bg-rose-500 text-white font-bold py-2 rounded-lg transition cursor-pointer flex-1">清除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录全屏弹窗 -->
+    <div id="historyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-2 sm:p-4">
+        <div class="theme-card bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center p-4 sm:p-6 border-b border-slate-800">
+                <h3 class="text-sm sm:text-base font-bold flex items-center gap-2 font-cyber"><span>📑</span> 历史群智测算清单</h3>
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer shadow-sm">📥 导出 Excel</button>
+                    <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 cursor-pointer">✕</button>
+                </div>
+            </div>
+            <div id="modalHistoryContent" class="p-4 sm:p-6 overflow-y-auto space-y-4 font-mono text-xs flex-1 history-scroll"></div>
+            <div class="p-3 sm:p-4 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-2">
+                <span class="text-[10px] sm:text-[11px] text-slate-400 text-center sm:text-left">提示：完整记录了比分定型及背后数理逻辑。</span>
+                <button onclick="closeHistoryModal()" class="theme-btn-sub bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-4 py-2 rounded-lg transition cursor-pointer font-semibold border border-slate-700 w-full sm:w-auto">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 前端脚本逻辑 -->
+    <script>
+        let historyLogs = [];
+        let currentMode = 'jc';
+        let globalMatchData = [];
+        let batchPredictionLogs = [];
+        let isDarkMode = true;
+        let selectedLeagues = [];
+        let workRange = 'today';
+        const API_KEY_STORAGE = 'cyberSoccerApiKeys';
+        const LEAGUE_PREFIX_RE = /^(?:竞彩足球|竞彩|北京单场|北单|胜平负|让球胜平负|英超|英冠|英甲|英乙|西甲|西乙|意甲|意乙|德甲|德乙|法甲|法乙|葡超|荷甲|比甲|瑞超|挪超|丹超|芬超|奥甲|苏超|欧冠|欧联|欧协联|欧洲杯|世预赛|世欧预|世南美预|亚洲杯|亚冠|亚冠精英|亚冠二级|日职联|日职乙|日职|日乙|日联杯|韩职|韩K联|澳超|美职足|美公开赛|巴甲|阿甲|墨超|中超|中甲|足协杯|解放者杯|南俱杯|世俱杯|国际赛|友谊赛)\s*/;
+
+        function getStoredApiKeys() {
+            try {
+                return JSON.parse(localStorage.getItem(API_KEY_STORAGE) || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function openApiKeyModal() {
+            const keys = getStoredApiKeys();
+            document.getElementById('deepseekApiKeyInput').value = keys.deepseek || '';
+            document.getElementById('chatgptApiKeyInput').value = keys.chatgpt || '';
+            document.getElementById('apiKeyModal').classList.remove('hidden');
+        }
+
+        function closeApiKeyModal() {
+            document.getElementById('apiKeyModal').classList.add('hidden');
+        }
+
+        function saveApiKeys() {
+            const keys = {
+                deepseek: normalizeApiKeyInput(document.getElementById('deepseekApiKeyInput').value),
+                chatgpt: normalizeApiKeyInput(document.getElementById('chatgptApiKeyInput').value)
+            };
+            localStorage.setItem(API_KEY_STORAGE, JSON.stringify(keys));
+            closeApiKeyModal();
+            alert('API Key 已保存到当前浏览器。');
+        }
+
+        function clearApiKeys() {
+            localStorage.removeItem(API_KEY_STORAGE);
+            document.getElementById('deepseekApiKeyInput').value = '';
+            document.getElementById('chatgptApiKeyInput').value = '';
+            alert('API Key 已清除。');
+        }
+
+        function normalizeApiKeyInput(value) {
+            return String(value || '').trim().replace(/\\_/g, '_');
+        }
+
+        function setWorkflowStatus(text) {
+            const el = document.getElementById('workflowStatus');
+            if (el) el.innerText = text;
+        }
+
+        function buildWebAiPrompt() {
+            const oddsInfo = window.currentMatchOdds || {};
+            const matchText = document.getElementById('matchInput').value.trim() || oddsInfo.matchName || '未选择比赛';
+            const fields = {
+                主场城市: document.getElementById('factorVenueCity').value.trim(),
+                天气场地: document.getElementById('factorWeather').value.trim(),
+                球员伤停: document.getElementById('factorInjuries').value.trim(),
+                战术阵型: document.getElementById('factorFormation').value.trim(),
+                心理战意: document.getElementById('factorPsychology').value.trim(),
+                近期战绩: document.getElementById('factorRecentForm').value.trim(),
+                历史交锋: document.getElementById('factorH2H').value.trim(),
+                未来赛程: document.getElementById('factorFutureSchedule').value.trim()
+            };
+            const factorLines = Object.entries(fields)
+                .filter(([, value]) => value)
+                .map(([key, value]) => `- ${key}: ${value}`)
+                .join('\n') || '- 暂无人工补充条件';
+            return [
+                '你是一名职业足球赛前盘口分析师。请只基于我提供的数据和你能明确核验的常识分析，不要编造不存在的伤停、首发、阵型、天气、历史交锋。',
+                '',
+                `比赛: ${matchText}`,
+                `编号: ${oddsInfo.code || '未知'}`,
+                `赔率: 主胜 ${oddsInfo.s || '--'} / 平 ${oddsInfo.p || '--'} / 客胜 ${oddsInfo.f || '--'} / 让球 ${formatRangLabel(oddsInfo.rangNum || '0')} ${formatRangValue(oddsInfo.rangNum || '0')}`,
+                `让球盘: 让主胜 ${oddsInfo.rs || '--'} / 让平 ${oddsInfo.rp || '--'} / 让客胜 ${oddsInfo.rf || '--'}`,
+                '',
+                '已知条件:',
+                factorLines,
+                '',
+                '分析维度:',
+                '- 标准胜平负隐含概率与返还率',
+                '- 让球/受让球深度是否匹配标准盘',
+                '- 平赔是否有保护或分流作用',
+                '- 热门方向是否过热，是否存在诱导风险',
+                '- 主客场、赛程体能、战意、伤停、天气、历史交锋是否需要核验',
+                '',
+                '请输出:',
+                '1. 胜平负倾向与理由',
+                '2. 让球盘倾向与理由',
+                '3. 最可能比分1个，备选比分2个',
+                '4. 推荐总进球数，例如 1/2/3 球，并说明大球/小球方向',
+                '5. 资本盘口意图总结',
+                '6. 冷门/诱盘风险',
+                '7. 哪些关键数据缺失会影响判断',
+                '',
+                '要求: 标清楚哪些是基于已知数据，哪些只是概率推断；不要用“稳胆、必胜、稳赚”等确定性措辞。'
+            ].join('\n');
+        }
+
+        function buildTodayAiPrompt(range = workRange) {
+            const matches = getMatchesByRange(range);
+            if (!matches.length) return '';
+            const rows = matches.map((m, index) => {
+                const rangLabel = formatRangLabel(m.rangNum);
+                const rangValue = formatRangValue(m.rangNum);
+                return [
+                    `${index + 1}. ${m.code || ''} ${m.league || ''} ${m.matchName}，开赛 ${m.matchTime || '--'}`,
+                    `   标准胜平负: 主胜 ${m.s} / 平 ${m.p} / 客胜 ${m.f}`,
+                    `   让球胜平负: ${rangLabel} ${rangValue}；让主胜 ${m.rs || '--'} / 让平 ${m.rp || '--'} / 让客胜 ${m.rf || '--'}`
+                ].join('\n');
+            }).join('\n');
+            const rangeLabel = getRangeLabel(range);
+            return [
+                `你是一名职业足球赛前盘口分析师。下面是我从页面提取的${rangeLabel}赛事、标准胜平负赔率和让球胜平负赔率。`,
+                '',
+                '重要要求:',
+                '1. 只基于我提供的盘口、球队、时间做初筛，不要编造伤停、首发、天气、历史交锋。',
+                '2. 如果你知道某场的真实近期状态/赛程/战意，请明确写“需核验”，不要当作已确认事实。',
+                '3. 同时考虑：赔率隐含概率、返还率、低赔方向、平赔保护、让球深浅、让球盘与标准盘是否一致、热门方向是否过热、赛程战意可能性、冷门风险。',
+                '4. 对每场给出：胜平负倾向、让球盘倾向、最可能比分1个、备选比分2个、风险等级、需要补充核验的数据。',
+                '5. 最后按“最值得深入复盘/谨慎避开/可能有冷门”的分类汇总。',
+                '',
+                '输出格式:',
+                '【单场分析】',
+                '- 编号/比赛:',
+                '- 盘口解读:',
+                '- 胜平负倾向:',
+                '- 让球倾向:',
+                '- 比分: 主推 x:y；备选 x:y、x:y',
+                '- 推荐球数: x/x/x 球；大小球方向:',
+                '- 风险等级: 低/中/高',
+                '- 必须核验:',
+                '',
+                '【今日总结】',
+                '- 稳健关注:',
+                '- 冷门观察:',
+                '- 放弃/谨慎:',
+                '',
+                `${rangeLabel}赛事数据:`,
+                rows
+            ].join('\n');
+        }
+
+        async function copyTodayAiPrompt() {
+            if (!globalMatchData.length) {
+                alert('请先点击“获取赛程”，加载今日赛事数据。');
+                return;
+            }
+            const matches = getMatchesByRange(workRange);
+            if (!matches.length) {
+                alert(`当前筛选下没有${getRangeLabel(workRange)}赛事。`);
+                return;
+            }
+            const prompt = buildTodayAiPrompt(workRange);
+            try {
+                await navigator.clipboard.writeText(prompt);
+                setWorkflowStatus(`已复制 ${matches.length} 场AI提示词`);
+                alert(`已复制 ${matches.length} 场${getRangeLabel(workRange)}赛事的专业 AI 提示词。`);
+            } catch (e) {
+                alert('复制失败，请确认浏览器允许剪贴板权限。');
+            }
+        }
+
+        function getTodayKickoffMatches() {
+            return getMatchesByRange('today');
+        }
+
+        function getMatchesByRange(range = workRange) {
+            const matches = (globalMatchData || []).filter(m => !selectedLeagues.length || selectedLeagues.includes(m.league || '其他'));
+            if (range === 'all') return matches;
+            if (range === 'tomorrow') return matches.filter(isTomorrowKickoff);
+            return matches.filter(isTodayKickoff);
+        }
+
+        function isTodayKickoff(m) {
+            const today = getTodayWeekdayText();
+            const text = `${m.code || ''} ${m.matchTime || ''} ${m.raw || ''}`;
+            if (text.includes('今日') || text.includes('今天')) return true;
+            const weekHit = text.match(/周[一二三四五六日天]|星期[一二三四五六日天]/);
+            if (weekHit) return normalizeWeekday(weekHit[0]) === today;
+            return /^\\d{1,2}:\\d{2}$/.test(String(m.matchTime || '').trim());
+        }
+
+        function isTomorrowKickoff(m) {
+            const tomorrow = getTomorrowWeekdayText();
+            const text = `${m.code || ''} ${m.matchTime || ''} ${m.raw || ''}`;
+            if (text.includes('明日') || text.includes('明天')) return true;
+            const weekHit = text.match(/周[一二三四五六日天]|星期[一二三四五六日天]/);
+            if (weekHit) return normalizeWeekday(weekHit[0]) === tomorrow;
+            return false;
+        }
+
+        function getTodayWeekdayText() {
+            const labels = ['日', '一', '二', '三', '四', '五', '六'];
+            return labels[new Date().getDay()];
+        }
+
+        function getTomorrowWeekdayText() {
+            const labels = ['日', '一', '二', '三', '四', '五', '六'];
+            const d = new Date();
+            d.setDate(d.getDate() + 1);
+            return labels[d.getDay()];
+        }
+
+        function getRangeLabel(range = workRange) {
+            return range === 'tomorrow' ? '明日' : range === 'all' ? '全部' : '今日';
+        }
+
+        function normalizeWeekday(value) {
+            return String(value || '').replace('星期', '').replace('周', '').replace('天', '日');
+        }
+
+        async function openWebAiAssistant(provider) {
+            const prompt = buildWebAiPrompt();
+            try {
+                await navigator.clipboard.writeText(prompt);
+            } catch (e) {
+                console.warn('复制提示词失败', e);
+            }
+            const urls = {
+                deepseek: 'https://chat.deepseek.com/',
+                chatgpt: 'https://chatgpt.com/'
+            };
+            window.open(urls[provider], '_blank', 'noopener,noreferrer');
+            alert('已复制当前比赛提示词。网页登录后直接粘贴发送即可。');
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            const body = document.getElementById('app-body');
+            const header = document.getElementById('app-header');
+            const cards = document.querySelectorAll('.theme-card');
+            const boxes = document.querySelectorAll('.theme-box, .custom-box');
+            const inputs = document.querySelectorAll('.theme-input');
+            const subs = document.querySelectorAll('.theme-btn-sub');
+            const btn = document.getElementById('theme-toggle-btn');
+            const btnMobile = document.getElementById('theme-toggle-btn-mobile');
+
+            const themeIcon = isDarkMode ? "☀️" : "🌙";
+            if(btn) btn.innerText = themeIcon;
+            if(btnMobile) btnMobile.innerText = themeIcon;
+
+            if (!isDarkMode) {
+                body.style.background = "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%)";
+                body.style.color = "#0f172a";
+                header.style.backgroundColor = "rgba(255, 255, 255, 0.9)";
+                header.style.borderColor = "#cbd5e1";
+                cards.forEach(c => { c.style.backgroundColor = "rgba(255, 255, 255, 0.95)"; c.style.borderColor = "#cbd5e1"; c.style.color = "#0f172a"; });
+                boxes.forEach(b => { b.style.backgroundColor = "#f8fafc"; b.style.borderColor = "#e2e8f0"; b.style.color = "#334155"; });
+                inputs.forEach(i => { i.style.backgroundColor = "#ffffff"; i.style.borderColor = "#cbd5e1"; i.style.color = "#0f172a"; });
+                subs.forEach(s => { s.style.backgroundColor = "#e2e8f0"; s.style.color = "#0f172a"; s.style.borderColor = "#cbd5e1"; });
+            } else {
+                body.style.background = "linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e1b4b 100%)";
+                body.style.color = "#f8fafc";
+                header.style.backgroundColor = "rgba(15, 23, 42, 0.9)";
+                header.style.borderColor = "#1e293b";
+                cards.forEach(c => { c.style.backgroundColor = "rgba(15, 23, 42, 0.85)"; c.style.borderColor = "#1e293b"; c.style.color = "#f8fafc"; });
+                boxes.forEach(b => { b.style.backgroundColor = "rgba(30, 41, 59, 0.6)"; b.style.borderColor = "rgba(51, 65, 85, 0.8)"; b.style.color = "#cbd5e1"; });
+                inputs.forEach(i => { i.style.backgroundColor = "rgba(30, 41, 59, 0.6)"; i.style.borderColor = "rgba(51, 65, 85, 0.8)"; i.style.color = "#f8fafc"; });
+                subs.forEach(s => { s.style.backgroundColor = "#1e293b"; s.style.color = "#f8fafc"; s.style.borderColor = "#334155"; });
+            }
+        }
+
+        function switchTab(mode) {
+            if (currentMode === mode) return;
+            currentMode = mode;
+            document.getElementById('tab-jc').className = mode === 'jc' ? "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition bg-sky-600 text-white shadow-xs cursor-pointer" : "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition text-slate-400 hover:text-white cursor-pointer";
+            document.getElementById('tab-bd').className = mode === 'bd' ? "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition bg-sky-600 text-white shadow-xs cursor-pointer" : "px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition text-slate-400 hover:text-white cursor-pointer";
+            document.getElementById('list-title').innerText = mode === 'jc' ? "📊 竞彩足球盘口映射" : "📊 北京单场盘口映射";
+            historyLogs = [];
+            selectedLeagues = [];
+            renderHistoryLogs();
+            document.getElementById('matchInput').value = '';
+            document.getElementById('resultBox').classList.add('hidden');
+            fetchData();
+        }
+
+        async function fetchData() {
+            const container = document.getElementById('match-container');
+            const statusText = document.getElementById('sync-status');
+            setWorkflowStatus('正在获取赛程');
+            statusText.innerText = "● 同步中...";
+            container.innerHTML = `<div class="text-center py-10 text-sky-400 text-xs font-bold animate-pulse">正在获取真实盘口与赛事数据...</div>`;
+            const endpoint = currentMode === 'jc' ? '/api/matches/source-new' : '/api/matches/beidan';
+
+            try {
+                const res = await fetch(endpoint);
+                const json = await res.json();
+                if (!json.success) {
+                    statusText.innerText = "● 获取失败";
+                    setWorkflowStatus(currentMode === 'bd' ? '北单获取失败' : '赛程获取失败');
+                    container.innerHTML = `<div class="text-center py-10 text-rose-400 text-xs font-bold px-4">${json.message || '数据源暂不可用'}</div>`;
+                    return;
+                }
+                if (json && json.matchList) {
+                    statusText.innerText = "● 就绪";
+                    globalMatchData = [];
+                    let html = '';
+                    const uniqueMap = new Map();
+                    json.matchList.forEach(m => {
+                        const raw = m.raw || [m.code, m.matchName, m.matchTime, m.s, m.p, m.f, m.rangNum, m.rs, m.rp, m.rf].filter(Boolean).join(' ');
+                        const vsIndex = raw.indexOf('VS') !== -1 ? raw.indexOf('VS') : raw.indexOf('vs');
+                        if (vsIndex !== -1) {
+                            const teamKey = raw.substring(Math.max(0, vsIndex - 12), Math.min(raw.length, vsIndex + 15)).replace(/\s+/g, '');
+                            if (!uniqueMap.has(teamKey)) uniqueMap.set(teamKey, { ...m, raw });
+                        }
+                    });
+
+                    let indexCounter = 1;
+                    uniqueMap.forEach((matchItem) => {
+                        const rawText = matchItem.raw || '';
+                        const league = matchItem.league || extractLeagueName(rawText);
+                        const oddsMatches = rawText.match(/\b\d+\.\d{2}\b/g) || [];
+                        // 提取标准胜平负赔率
+                        let s = matchItem.s || oddsMatches[0] || '2.00';
+                        let p = matchItem.p || oddsMatches[1] || '3.00';
+                        let f = matchItem.f || oddsMatches[2] || '3.00';
+
+                        // 提取让球盘数据：如果赔率数量大于3，通常后三位或中间包含让球赔率
+                        let hasRang = Boolean(matchItem.hasRang) || oddsMatches.length >= 6;
+                        let rs = matchItem.rs || (hasRang ? oddsMatches[3] : '--');
+                        let rp = matchItem.rp || (hasRang ? oddsMatches[4] : '--');
+                        let rf = matchItem.rf || (hasRang ? oddsMatches[5] : '--');
+
+                        const rangInfo = parseRangInfo(rawText);
+                        let rangNum = normalizeRangNum(matchItem.rangNum || rangInfo.rangNum);
+                        if (rangInfo.hasRang) {
+                            hasRang = true;
+                        }
+
+                        // 修复开赛时间正则：匹配标准的“周X 19:30”或“19:30”格式，防止匹配到赔率和小数
+                        let timeTag = "今日 20:00";
+                        const timeMatch = rawText.match(/(?:周[一-日]\s*\d{2}:\d{2})|(?:\d{2}:\d{2})/);
+                        if (timeMatch) timeTag = timeMatch[0];
+                        if (matchItem.matchTime) timeTag = matchItem.matchTime;
+
+                        let matchCode = "";
+                        const codeMatch = rawText.match(/((?:周[一-日]\d+)|(?:\d{3})|(?:北单\d+))/);
+                        if (matchItem.code) matchCode = matchItem.code;
+                        else if (codeMatch) matchCode = codeMatch[1];
+                        else matchCode = currentMode === 'bd' ? `北单${String(indexCounter).padStart(3, '0')}` : `JC${String(indexCounter).padStart(3, '0')}`;
+                        matchCode = normalizeMatchCode(matchCode);
+
+                        let cleanName = matchItem.matchName || cleanMatchNameFromRaw(rawText, timeTag);
+
+                        globalMatchData.push({ matchName: cleanName, league, code: matchCode, s, p, f, hasRang, rangNum, rs, rp, rf, matchTime: timeTag, raw: rawText });
+                        const isTodayMatch = isTodayKickoff({ code: matchCode, matchTime: timeTag, raw: rawText });
+                        const rangValue = formatRangValue(rangNum);
+
+                        const cardBg = !isDarkMode ? "background-color: rgba(255, 255, 255, 0.95); border-color: #cbd5e1; color: #0f172a;" : "background-color: rgba(30, 41, 59, 0.75); border-color: rgba(51, 65, 85, 0.7); color: #f8fafc;";
+                        const boxBg = !isDarkMode ? "background-color: #f8fafc; border-color: #e2e8f0; color: #334155;" : "background-color: rgba(30, 41, 59, 0.6); border-color: rgba(51, 65, 85, 0.8); color: #cbd5e1;";
+
+                        // 恢复并渲染双盘口（标准胜平负 + 让球胜平负）
+                        let gridHtml = `
+                            <div class="space-y-2 font-mono text-xs">
+                                <div class="space-y-1">
+                                    <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
+                                        <span>【标准胜平负盘】</span>
+                                        <span class="text-[9px] text-slate-500">主 / 平 / 客</span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1.5 text-center">
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">主胜</div><div class="font-bold">${s}</div></div>
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">平局</div><div class="text-sky-400 font-bold">${p}</div></div>
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">客胜</div><div class="text-rose-400 font-bold">${f}</div></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="text-[10px] text-slate-400 font-bold flex items-center justify-between">
+                                        <span>【让球胜平负盘 (${formatRangLabel(rangNum)})】 <b class="${getRangBadgeClass(rangNum)} px-1.5 py-0.5 rounded border">${rangValue}</b></span>
+                                        <span class="text-[9px] text-purple-400 font-semibold">让球网格</span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-1.5 text-center">
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让主胜</div><div class="font-bold">${rs}</div></div>
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让平</div><div class="text-sky-400 font-bold">${rp}</div></div>
+                                        <div class="custom-box p-1.5 rounded border" style="${boxBg}"><div class="text-[9px] text-slate-400">让客胜</div><div class="text-rose-400 font-bold">${rf}</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        html += `
+                            <div class="match-card p-3 sm:p-4 rounded-xl transition-all space-y-3 shadow-xs border" style="${cardBg}"
+                                 data-match="${cleanName.replace(/"/g, '&quot;')}" data-league="${league.replace(/"/g, '&quot;')}" data-code="${matchCode}" data-s="${s}" data-p="${p}" data-f="${f}" data-hasrang="${hasRang}" data-rangnum="${rangNum}" data-rs="${rs}" data-rp="${rp}" data-rf="${rf}" data-time="${timeTag}">
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="custom-box px-2 py-0.5 rounded text-[11px] font-mono font-bold border" style="${boxBg}">${matchCode}</span>
+                                        <span class="bg-slate-500/10 text-slate-300 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-mono font-semibold">${league}</span>
+                                        <span class="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded text-[10px] font-mono font-semibold">⏰ ${timeTag}</span>
+                                        <span class="${isTodayMatch ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'} border px-2 py-0.5 rounded text-[10px] font-mono font-semibold">${isTodayMatch ? '今日开赛' : '非今日'}</span>
+                                        <div class="text-xs sm:text-sm font-bold font-mono">${cleanName}</div>
+                                    </div>
+                                    <button class="btn-ai-select w-full sm:w-auto bg-gradient-to-r from-sky-600 to-purple-600 hover:from-sky-500 hover:to-purple-500 text-white px-3 py-1.5 rounded-lg transition text-xs font-semibold cursor-pointer shadow-xs text-center">AI联合推演</button>
+                                </div>
+                                ${gridHtml}
+                            </div>
+                        `;
+                        indexCounter++;
+                    });
+                    renderLeagueFilter();
+                    container.innerHTML = html || `<div class="text-center py-10 text-amber-300 text-xs font-bold px-4">已连接数据源，但没有解析到可展示的赛事。</div>`;
+                    applyLeagueFilter();
+                    setWorkflowStatus(`已获取 ${globalMatchData.length} 场，${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
+
+                    document.querySelectorAll('.btn-ai-select').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const card = e.currentTarget.closest('.match-card');
+                            const matchName = card.getAttribute('data-match');
+                            const matchCode = card.getAttribute('data-code') || '';
+                            const s = card.getAttribute('data-s');
+                            const p = card.getAttribute('data-p');
+                            const f = card.getAttribute('data-f');
+                            const rangNum = card.getAttribute('data-rangnum');
+                            const rs = card.getAttribute('data-rs');
+                            const rp = card.getAttribute('data-rp');
+                            const rf = card.getAttribute('data-rf');
+                            const matchTime = card.getAttribute('data-time');
+
+                            document.getElementById('matchInput').value = `[${currentMode.toUpperCase()}] ${matchName} | 开赛:${matchTime}`;
+                            window.currentMatchOdds = { s, p, f, code: matchCode, rangNum, rs, rp, rf, matchName, matchTime };
+                        });
+                    });
+                }
+            } catch (err) {
+                setWorkflowStatus('赛程获取失败');
+                container.innerHTML = `<div class="text-center py-10 text-rose-400 text-xs font-bold">连接服务异常</div>`;
+            }
+        }
+
+        function parseRangInfo(rawText) {
+            const text = String(rawText || '').replace(/\s+/g, ' ');
+            const cnNumber = '[一二两三四五六七八九十]';
+            const candidates = [
+                [/([+-]?\d)(?=\s*(?:让胜|让平|让负|让主胜|让客胜))/, 0],
+                [/(?:VS|vs).+?\s([+-]?\d)(?=\s*(?:让胜|让平|让负|让主胜|让客胜))/, 0],
+                [/\(([+-]\d+)\)/, 0],
+                [new RegExp(`受让\\s*(${cnNumber})`), 1, true],
+                [/受让\s*([+＋]?\d+)/, 1],
+                [/(?:让球胜平负|让球|让)\s*([+＋]\d+)/, 1],
+                [new RegExp(`(?:让球胜平负|让球|让)\\s*[-－]\\s*(${cnNumber})`), -1, true],
+                [new RegExp(`(?:让球胜平负|让球|让)\\s*(${cnNumber})`), -1, true],
+                [/(?:让球胜平负|让球|让)\s*(\d+)/, -1],
+                [/(?:VS|vs).+?\s(0)(?=\s*胜)/, 0],
+                [/(?:^|\s)([+-]\d)(?=\s|胜|平|负|$)/, 0]
+            ];
+            for (const [pattern, sign, isChinese] of candidates) {
+                const m = text.match(pattern);
+                if (!m) continue;
+                const n = isChinese ? chineseHandicapToNumber(m[1]) : parseInt(String(m[1]).replace(/[＋+]/g, ''), 10);
+                if (!Number.isFinite(n)) continue;
+                const value = sign === 0 ? n : sign * Math.abs(n);
+                return { hasRang: true, rangNum: value > 0 ? `+${value}` : String(value) };
+            }
+            return { hasRang: false, rangNum: '--' };
+        }
+
+        function chineseHandicapToNumber(value) {
+            const map = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+            return map[String(value || '').trim()];
+        }
+
+        function normalizeRangNum(value) {
+            if (value === undefined || value === null || value === '' || value === '--') return '--';
+            const text = String(value).trim().replace('＋', '+');
+            const n = parseInt(text, 10);
+            if (!Number.isFinite(n)) return '--';
+            return n > 0 ? `+${n}` : String(n);
+        }
+
+        function normalizeMatchCode(code) {
+            const text = String(code || '').trim();
+            if (currentMode === 'bd') {
+                const digits = text.match(/\d+/)?.[0];
+                return digits ? `北单${digits.padStart(3, '0')}` : text;
+            }
+            return text;
+        }
+
+        function extractLeagueName(rawText) {
+            const text = String(rawText || '').replace(/\s+/g, ' ').trim();
+            const structured = text.match(/^(.+?)\s+(?:周[一-日]\d+|北单\d+|\d{1,3})\s+\d{1,2}:\d{2}\b/);
+            if (structured) return normalizeLeagueName(structured[1]);
+            const beforeCode = text.match(/^(.+?)\s+(?:周[一-日]\d+|北单\d+|\d{1,3})\b/);
+            if (beforeCode) return normalizeLeagueName(beforeCode[1]);
+            const first = text.split(/\s+/)[0];
+            if (!first || /^(?:周[一-日]\d+|北单\d+|\d{1,3}|\d{1,2}:\d{2})$/.test(first)) return '其他';
+            return normalizeLeagueName(first);
+        }
+
+        function normalizeLeagueName(value) {
+            const text = String(value || '')
+                .replace(/竞彩足球|竞彩|北京单场|北单|胜平负|让球胜平负/g, '')
+                .replace(/\d{1,3}$/g, '')
+                .trim();
+            return text || '其他';
+        }
+
+        function renderLeagueFilter() {
+            const box = document.getElementById('league-filter');
+            if (!box) return;
+            const counts = new Map();
+            (globalMatchData || []).forEach(m => counts.set(m.league || '其他', (counts.get(m.league || '其他') || 0) + 1));
+            const leagues = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+            const allActive = selectedLeagues.length === 0;
+            const allBtn = `<button onclick="setLeagueFilter('全部')" class="${allActive ? 'bg-sky-600 text-white border-sky-500' : 'bg-slate-800/70 text-slate-300 border-slate-700 hover:border-sky-500 hover:text-white'} border px-2.5 py-1.5 rounded-md text-[11px] font-bold transition">全部 <span class="opacity-70">${globalMatchData.length}</span></button>`;
+            const leagueBtns = leagues.map(league => {
+                const active = selectedLeagues.includes(league);
+                const count = counts.get(league);
+                return `<button onclick="setLeagueFilter('${escapeJsAttr(league)}')" class="${active ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-slate-800/70 text-slate-300 border-slate-700 hover:border-sky-500 hover:text-white'} border px-2.5 py-1.5 rounded-md text-[11px] font-bold transition">${league} <span class="opacity-70">${count}</span></button>`;
+            }).join('');
+            box.innerHTML = `${allBtn}${leagueBtns}<span class="text-[10px] text-slate-500 self-center">可多选</span>`;
+        }
+
+        function setLeagueFilter(league) {
+            if (league === '全部') {
+                selectedLeagues = [];
+            } else if (selectedLeagues.includes(league)) {
+                selectedLeagues = selectedLeagues.filter(x => x !== league);
+            } else {
+                selectedLeagues = [...selectedLeagues, league];
+            }
+            renderLeagueFilter();
+            applyLeagueFilter();
+            setWorkflowStatus(`${getLeagueFilterLabel()} / ${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
+        }
+
+        function applyLeagueFilter() {
+            document.querySelectorAll('.match-card').forEach(card => {
+                const league = card.getAttribute('data-league') || '其他';
+                card.classList.toggle('hidden', selectedLeagues.length > 0 && !selectedLeagues.includes(league));
+            });
+        }
+
+        function setWorkRange(range) {
+            workRange = range;
+            document.querySelectorAll('.work-range-btn').forEach(btn => {
+                const active = btn.id === `range-${range}`;
+                btn.className = active
+                    ? 'work-range-btn bg-sky-600 text-white font-bold py-2 rounded-md'
+                    : 'work-range-btn text-slate-300 hover:text-white font-bold py-2 rounded-md';
+            });
+            setWorkflowStatus(`${getLeagueFilterLabel()} / ${getRangeLabel(workRange)} ${getMatchesByRange(workRange).length} 场`);
+        }
+
+        function getLeagueFilterLabel() {
+            return selectedLeagues.length ? selectedLeagues.join('+') : '全部赛事';
+        }
+
+        function formatRangValue(rangNum) {
+            if (!rangNum || rangNum === '--') return '+/-?';
+            const n = parseInt(rangNum, 10);
+            if (!Number.isFinite(n)) return String(rangNum);
+            return n > 0 ? `+${n}` : String(n);
+        }
+
+        function getRangBadgeClass(rangNum) {
+            const n = parseInt(rangNum, 10);
+            if (!Number.isFinite(n)) return 'bg-slate-500/10 text-slate-300 border-slate-500/30';
+            if (n > 0) return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+            if (n < 0) return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
+            return 'bg-slate-500/10 text-slate-300 border-slate-500/30';
+        }
+
+        function escapeJsAttr(value) {
+            return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function formatRangLabel(rangNum) {
+            if (!rangNum || rangNum === '--') return '让球数未识别';
+            const n = parseInt(rangNum, 10);
+            if (!Number.isFinite(n)) return `让 ${rangNum}`;
+            if (n > 0) return `主队受让 ${n}`;
+            if (n < 0) return `主队让 ${Math.abs(n)}`;
+            return '平手盘';
+        }
+
+        function cleanMatchNameFromRaw(rawText, timeTag) {
+            let name = String(rawText || '');
+            if (timeTag) name = name.replace(timeTag, '');
+            name = name
+                .replace(/((?:周[一-日]\d+)|(?:北单\d+)|(?:JC\d+)|(?:\d{3}))/g, '')
+                .replace(/(^|\s)\d{1,2}(?=\s)/g, ' ')
+                .replace(/单|胆/g, '')
+                .split(/(?:胜平负|让球胜平负|让球|主胜|客胜|让主胜|让客胜|让平|胜|平|负)/)[0]
+                .replace(/\b\d+\.\d{2}\b/g, '')
+                .replace(/(?:让|受让)\s*(?:负|[-－+])?\s*\d+/g, '')
+                .replace(/\s*[+-]?\d+\s*$/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const vs = name.match(/(.+?)\s*(?:VS|vs|V|v|对)\s*(.+)/);
+            if (vs) {
+                const home = cleanTeamDisplayName(vs[1]);
+                const away = cleanTeamDisplayName(vs[2]);
+                return `${home} VS ${away}`;
+            }
+            return cleanTeamDisplayName(name);
+        }
+
+        function cleanTeamDisplayName(name) {
+            return stripLeaguePrefix(String(name || ''))
+                .replace(/^(?:周[一-日]\d+|北单\d+|JC\d+|\d{3})\s*/g, '')
+                .replace(/^[\u4e00-\u9fa5A-Za-z]{2,10}\s+\d{1,3}\s+/, '')
+                .replace(/^[\u4e00-\u9fa5A-Za-z]{2,10}\s+(?=[^\s]+$)/, '')
+                .replace(/[+\-]?\d+$/g, '')
+                .trim();
+        }
+
+        function stripLeaguePrefix(value) {
+            let text = String(value || '').trim();
+            for (let i = 0; i < 3; i++) {
+                const next = text.replace(LEAGUE_PREFIX_RE, '').trim();
+                if (next === text) break;
+                text = next;
+            }
+            return text;
+        }
+
+        function collectFactorInputs() {
+            return {
+                venueCity: document.getElementById('factorVenueCity').value.trim(),
+                injuries: document.getElementById('factorInjuries').value.trim(),
+                weather: document.getElementById('factorWeather').value.trim(),
+                formation: document.getElementById('factorFormation').value.trim(),
+                psychology: document.getElementById('factorPsychology').value.trim(),
+                recentForm: document.getElementById('factorRecentForm').value.trim(),
+                h2hRecord: document.getElementById('factorH2H').value.trim(),
+                futureSchedule: document.getElementById('factorFutureSchedule').value.trim()
+            };
+        }
+
+        async function generateConsensusPrediction() {
+            const matchInput = document.getElementById('matchInput').value.trim();
+            if (!matchInput) { alert('请先在左侧选择一场比赛！'); return; }
+
+            const resultBox = document.getElementById('resultBox');
+            resultBox.classList.remove('hidden');
+            document.getElementById('capitalResult').innerHTML = `<div class="animate-pulse">💰 资本盘口意图计算中...</div>`;
+            document.getElementById('deepseekResult').innerHTML = `<div class="animate-pulse">🧠 DeepSeek 分析中...</div>`;
+            document.getElementById('chatgptResult').innerHTML = `<div class="animate-pulse">💬 ChatGPT 分析中...</div>`;
+            document.getElementById('marketBaseResult').innerHTML = `<div class="animate-pulse">📐 赔率泊松基准计算中...</div>`;
+            document.getElementById('guaResult').innerHTML = `<div class="animate-pulse">☯️ 梅花易数起卦中...</div>`;
+            document.getElementById('scoreResult').innerHTML = ``;
+
+            const factors = collectFactorInputs();
+
+            const useDeepSeek = document.getElementById('useDeepSeek').checked;
+            const useChatGPT = document.getElementById('useChatGPT').checked;
+            const useMarketBase = document.getElementById('useMarketBase').checked;
+            const useBagua = document.getElementById('useBagua').checked;
+
+            let oddsInfo = window.currentMatchOdds || { s: '2.00', p: '3.00', f: '3.00', code: '001', matchName: matchInput, matchTime: '今日 20:00' };
+            const apiKeys = getStoredApiKeys();
+
+            try {
+                const res = await fetch('/api/ai/predict-consensus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oddsInfo, factors, contextData: factors, apiKeys, useDeepSeek, useChatGPT, useMarketBase, useBagua })
+                });
+                const json = await res.json();
+
+                if (json.success) {
+                    const data = json.data;
+                    const intel = data.intelligence || {};
+                    const renderIntelList = (list, colorClass) => (list || []).slice(0, 8).map(item =>
+                        `<div class="${colorClass}">【${item.name}】${item.value} <span class="text-slate-500">(${item.source})</span></div>`
+                    ).join('') || `<div class="text-slate-500">无</div>`;
+                    
+                    document.getElementById('capitalResult').innerHTML = `💰 <strong>盘口资本意图初探：</strong> ${data.capitalIntent}`;
+                    document.getElementById('deepseekResult').innerHTML = data.deepseek;
+                    document.getElementById('chatgptResult').innerHTML = data.chatgpt;
+                    document.getElementById('marketBaseResult').innerHTML = data.marketBase;
+                    document.getElementById('guaResult').innerHTML = data.bagua;
+                    
+                    document.getElementById('scoreResult').innerHTML = `
+                        <div class="space-y-3 pt-2 font-mono text-xs">
+                            <div class="space-y-1.5 bg-sky-950/40 p-3 rounded-lg border border-sky-800/50">
+                                <div class="text-sky-300 font-bold flex flex-col sm:flex-row justify-between items-start sm:items-center text-sm gap-1">
+                                    <span>🤖 模型聚合综合比分：${data.aiModelConsensusScore}</span>
+                                    <span class="text-[10px] text-purple-400">数据完整度: ${data.confidence}</span>
+                                </div>
+                                <div class="text-[11px] text-slate-300 font-sans leading-relaxed">
+                                    <strong class="text-sky-400">💡 理由：</strong> ${data.aiReason}
+                                </div>
+                                <div class="text-[11px] text-cyan-200 font-sans leading-relaxed">
+                                    <strong>⚽ 推荐球数：</strong>${data.market?.totalGoals?.label || '暂无'}
+                                </div>
+                                <div class="text-[10px] text-slate-400 font-sans leading-relaxed">
+                                    已验证 ${data.dataQuality.verifiedCount} 项 / 人工输入 ${data.dataQuality.manualCount} 项 / 缺失 ${data.dataQuality.missingCount} 项 / 真实模型调用 ${data.dataQuality.realModelCalls} 个。${data.dataQuality.note}
+                                </div>
+                            </div>
+                            <div class="space-y-1.5 bg-amber-950/40 p-3 rounded-lg border border-amber-800/50">
+                                <div class="text-amber-400 font-bold text-sm">
+                                    <span>💰 盘口资本预期比分：${data.capitalDesiredScore}</span>
+                                </div>
+                                <div class="text-[11px] text-slate-300 font-sans leading-relaxed">
+                                    <strong class="text-amber-400">💡 理由：</strong> ${data.capitalReason}
+                                </div>
+                            </div>
+                            <div class="space-y-2 bg-slate-900/60 p-3 rounded-lg border border-slate-700/60">
+                                <div class="text-slate-200 font-bold text-sm">📌 自动情报清单</div>
+                                <div class="space-y-1 text-[11px] font-sans leading-relaxed">
+                                    <div class="font-bold text-emerald-300">已验证数据</div>
+                                    ${renderIntelList(intel.verified, 'text-emerald-200')}
+                                    <div class="font-bold text-sky-300 pt-1">人工输入</div>
+                                    ${renderIntelList(intel.manual, 'text-sky-200')}
+                                    <div class="font-bold text-rose-300 pt-1">缺失/未匹配</div>
+                                    ${renderIntelList(intel.missing, 'text-rose-200')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    historyLogs.push({
+                        code: oddsInfo.code, match: oddsInfo.matchName, matchTime: oddsInfo.matchTime,
+                        time: new Date().toLocaleTimeString(),
+                        capitalIntent: data.capitalIntent, 
+                        capitalDesiredScore: data.capitalDesiredScore,
+                        capitalReason: data.capitalReason,
+                        aiModelConsensusScore: data.aiModelConsensusScore,
+                        aiReason: data.aiReason,
+                        deepseek: data.deepseek, chatgpt: data.chatgpt, marketBase: data.marketBase, bagua: data.bagua,
+                        confidence: data.confidence,
+                        dataQuality: data.dataQuality
+                    });
+                    renderHistoryLogs();
+                } else {
+                    alert('预测接口返回错误：' + json.message);
+                }
+            } catch (e) {
+                alert('后端服务请求失败。');
+            }
+        }
+
+        async function reviewPastedAiResult() {
+            const matchInput = document.getElementById('matchInput').value.trim();
+            const aiText = document.getElementById('aiPasteInput').value.trim();
+            if (!matchInput) { alert('请先在左侧选择一场要复盘的比赛。'); return; }
+            if (!aiText) { alert('请先粘贴网页 AI 的分析结果。'); return; }
+
+            const resultBox = document.getElementById('resultBox');
+            resultBox.classList.remove('hidden');
+            document.getElementById('reviewResult').innerHTML = `<div class="animate-pulse text-amber-300">正在结合盘口与AI文本做二次复盘...</div>`;
+
+            const oddsInfo = window.currentMatchOdds || { s: '2.00', p: '3.00', f: '3.00', code: '001', matchName: matchInput, matchTime: '今日 20:00' };
+            const factors = collectFactorInputs();
+            try {
+                const res = await fetch('/api/ai/review-ai-result', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oddsInfo, factors, contextData: factors, aiText })
+                });
+                const json = await res.json();
+                if (!json.success) {
+                    alert('复盘接口返回错误：' + json.message);
+                    return;
+                }
+                const review = json.data.review;
+                document.getElementById('reviewResult').innerHTML = `
+                    <div class="space-y-2 bg-amber-950/40 p-3 rounded-lg border border-amber-800/50 text-xs font-mono">
+                        <div class="text-amber-300 font-bold text-sm">🧾 AI结果盘口复盘：${review.finalScore}</div>
+                        <div class="text-slate-300 font-sans leading-relaxed">
+                            <strong class="text-amber-300">综合建议：</strong>${review.summary}
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            <div class="bg-slate-900/50 rounded p-2">AI比分：${review.extractedScores.join('、') || '未提取到'}</div>
+                            <div class="bg-slate-900/50 rounded p-2">盘口前五：${review.topMarketScores.join('、')}</div>
+                            <div class="bg-slate-900/50 rounded p-2">AI球数：${review.aiGoals.join('/') || '未提取到'}</div>
+                            <div class="bg-slate-900/50 rounded p-2">本地球数：${review.localGoals.join('/') || '暂无'}</div>
+                            <div class="bg-slate-900/50 rounded p-2">AI倾向：${review.aiLean}</div>
+                            <div class="bg-slate-900/50 rounded p-2">盘口倾向：${review.marketLean}</div>
+                            <div class="bg-slate-900/50 rounded p-2">一致度：${review.agreementScore}</div>
+                            <div class="bg-slate-900/50 rounded p-2">风险词：${review.riskWords.join('、') || '无'}</div>
+                        </div>
+                        <div class="text-rose-200 font-sans leading-relaxed">
+                            ${(review.conflictLogs || []).map(x => `⚠️ ${x}`).join('<br>') || '未发现明显盘口冲突。'}
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                alert('复盘请求失败。');
+            }
+        }
+
+        async function runBatchLocalPrediction() {
+            const matches = getMatchesByRange(workRange);
+            if (!matches.length) {
+                alert(`请先获取赛程，当前筛选下没有${getRangeLabel(workRange)}赛事。`);
+                return;
+            }
+            const resultBox = document.getElementById('resultBox');
+            resultBox.classList.remove('hidden');
+            document.getElementById('capitalResult').innerHTML = `📊 <strong>批量本地测算：</strong>正在测算 ${matches.length} 场${getRangeLabel(workRange)}赛事...`;
+            document.getElementById('deepseekResult').innerHTML = '';
+            document.getElementById('chatgptResult').innerHTML = '';
+            document.getElementById('marketBaseResult').innerHTML = '';
+            document.getElementById('guaResult').innerHTML = '';
+            document.getElementById('reviewResult').innerHTML = '';
+            document.getElementById('scoreResult').innerHTML = `<div class="animate-pulse text-cyan-300">盘口、天气、公开赛程数据批量计算中...</div>`;
+
+            const factors = collectFactorInputs();
+            batchPredictionLogs = [];
+            setWorkflowStatus(`测算中 0/${matches.length}`);
+            for (let i = 0; i < matches.length; i++) {
+                const m = matches[i];
+                setWorkflowStatus(`测算中 ${i + 1}/${matches.length}`);
+                document.getElementById('capitalResult').innerHTML = `📊 <strong>批量本地测算：</strong>${i + 1}/${matches.length} ${m.matchName}`;
+                try {
+                    const res = await fetch('/api/ai/predict-consensus', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            oddsInfo: m,
+                            factors,
+                            contextData: factors,
+                            apiKeys: {},
+                            useDeepSeek: false,
+                            useChatGPT: false,
+                            useMarketBase: true,
+                            useBagua: true
+                        })
+                    });
+                    const json = await res.json();
+                    if (json.success) batchPredictionLogs.push({ match: m, data: json.data });
+                    else batchPredictionLogs.push({ match: m, error: json.message });
+                } catch (e) {
+                    batchPredictionLogs.push({ match: m, error: '请求失败' });
+                }
+            }
+            renderBatchPredictionLogs();
+            setWorkflowStatus(`已测算 ${batchPredictionLogs.length} 场`);
+        }
+
+        function renderBatchPredictionLogs() {
+            const rows = batchPredictionLogs.map((item, index) => {
+                if (item.error) {
+                    return `<div class="p-2 rounded border border-rose-800/60 bg-rose-950/30 text-rose-200">#${index + 1} ${item.match.matchName}: ${item.error}</div>`;
+                }
+                const d = item.data;
+                const verified = d.dataQuality?.verifiedCount || 0;
+                const goals = d.market?.totalGoals?.label || '暂无球数建议';
+                return `
+                    <div class="p-3 rounded border border-slate-700/70 bg-slate-900/60 space-y-1">
+                        <div class="flex justify-between gap-2 text-slate-100 font-bold">
+                            <span>#${index + 1} ${item.match.code || ''} ${item.match.matchName}</span>
+                            <span class="text-cyan-300">${d.aiModelConsensusScore}</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300">盘口: ${d.capitalIntent}</div>
+                        <div class="text-[11px] text-cyan-200">推荐球数: ${goals}</div>
+                        <div class="text-[11px] text-amber-300">资本预期: ${d.capitalDesiredScore} | 数据完整度 ${d.confidence} | 已验证 ${verified} 项</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('capitalResult').innerHTML = `📊 <strong>批量本地测算完成：</strong>${batchPredictionLogs.length} 场`;
+            document.getElementById('scoreResult').innerHTML = `<div class="space-y-2">${rows}</div>`;
+        }
+
+        async function reviewBatchAiResult() {
+            const aiText = document.getElementById('aiPasteInput').value.trim();
+            const matches = batchPredictionLogs.length ? batchPredictionLogs.map(x => x.match) : getMatchesByRange(workRange);
+            if (!matches.length) { alert(`请先获取赛程，最好先执行“测算所选范围”。当前筛选下没有${getRangeLabel(workRange)}赛事。`); return; }
+            if (!aiText) { alert('请先粘贴网页 AI 的整批分析结果。'); return; }
+            const resultBox = document.getElementById('resultBox');
+            resultBox.classList.remove('hidden');
+            document.getElementById('reviewResult').innerHTML = `<div class="animate-pulse text-orange-300">正在对整批AI结果做盘口校验...</div>`;
+            const factors = collectFactorInputs();
+            const reviews = [];
+            setWorkflowStatus(`AI校验中 0/${matches.length}`);
+            for (let i = 0; i < matches.length; i++) {
+                const m = matches[i];
+                setWorkflowStatus(`AI校验中 ${i + 1}/${matches.length}`);
+                const segment = extractAiSegmentForMatch(aiText, m) || aiText;
+                try {
+                    const res = await fetch('/api/ai/review-ai-result', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ oddsInfo: m, factors, contextData: factors, aiText: segment })
+                    });
+                    const json = await res.json();
+                    if (json.success) reviews.push({ match: m, review: json.data.review, segmentMatched: Boolean(segment && segment !== aiText) });
+                } catch (e) {
+                    reviews.push({ match: m, error: '复盘失败' });
+                }
+            }
+            renderBatchReviews(reviews);
+            setWorkflowStatus(`已校验 ${reviews.length} 场`);
+        }
+
+        function extractAiSegmentForMatch(aiText, match) {
+            const [home, away] = String(match.matchName || '').split(/\s+VS\s+/i).map(x => x && x.trim());
+            const markers = [match.code, home, away].filter(Boolean);
+            const lines = aiText.split(/\n+/);
+            const hitIndex = lines.findIndex(line => markers.some(marker => marker && line.includes(marker)));
+            if (hitIndex < 0) return '';
+            return lines.slice(hitIndex, Math.min(lines.length, hitIndex + 10)).join('\n');
+        }
+
+        function renderBatchReviews(reviews) {
+            const rows = reviews.map((item, index) => {
+                if (item.error) return `<div class="p-2 rounded border border-rose-800/60 bg-rose-950/30 text-rose-200">#${index + 1} ${item.match.matchName}: ${item.error}</div>`;
+                const r = item.review;
+                const conflict = (r.conflictLogs || []).length ? r.conflictLogs.join('；') : '无明显冲突';
+                return `
+                    <div class="p-3 rounded border border-orange-800/60 bg-orange-950/30 space-y-1">
+                        <div class="flex justify-between gap-2 font-bold">
+                            <span>#${index + 1} ${item.match.code || ''} ${item.match.matchName}</span>
+                            <span class="text-orange-300">${r.finalScore} / ${r.agreementScore}</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300">AI比分: ${r.extractedScores.join('、') || '未提取'} | 盘口前五: ${r.topMarketScores.join('、')}</div>
+                        <div class="text-[11px] text-cyan-200">AI球数: ${r.aiGoals.join('/') || '未提取'} | 本地球数: ${r.localGoals.join('/') || '暂无'} | 命中: ${r.goalHits.join('/') || '无'}</div>
+                        <div class="text-[11px] text-slate-300">倾向: AI ${r.aiLean} / 盘口 ${r.marketLean} | 匹配段落: ${item.segmentMatched ? '是' : '否'}</div>
+                        <div class="text-[11px] text-amber-200">${r.summary}</div>
+                        <div class="text-[11px] text-rose-200">${conflict}</div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('reviewResult').innerHTML = `<div class="space-y-2"><div class="text-orange-300 font-bold">整批AI结果二次校验</div>${rows}</div>`;
+        }
+
+        function renderHistoryLogs() {
+            const container = document.getElementById('historyContainer');
+            document.getElementById('history-count').innerText = `${historyLogs.length} 条记录`;
+            if (historyLogs.length === 0) {
+                container.innerHTML = `<div class="text-center py-6 text-slate-400 text-[11px]">暂无历史推演日志...</div>`;
+                return;
+            }
+            const boxBg = !isDarkMode ? "background-color: #f8fafc; border-color: #e2e8f0; color: #334155;" : "background-color: rgba(30, 41, 59, 0.6); border-color: rgba(51, 65, 85, 0.8); color: #cbd5e1;";
+            let html = '';
+            historyLogs.forEach((item) => {
+                html += `
+                    <div onclick="openHistoryModal()" class="custom-box p-3 rounded-lg space-y-1.5 relative hover:border-sky-500 transition cursor-pointer shadow-xs border" style="${boxBg}">
+                        <div class="flex justify-between items-center text-[10px] text-slate-400">
+                            <span class="flex items-center gap-1.5 truncate">
+                                <span class="custom-box px-1.5 py-0.5 rounded font-bold border" style="${boxBg}">${item.code}</span>
+                                <span class="font-bold truncate max-w-[110px]">${item.match}</span>
+                            </span>
+                            <span>${item.confidence}</span>
+                        </div>
+                        <div class="text-xs space-y-0.5 flex justify-between">
+                            <div>模型比分: <strong class="text-sky-400 font-bold">${item.aiModelConsensusScore}</strong></div>
+                            <div>资本比分: <strong class="text-amber-400 font-bold">${item.capitalDesiredScore}</strong></div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function openHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            const content = document.getElementById('modalHistoryContent');
+            modal.classList.remove('hidden');
+            if (historyLogs.length === 0) {
+                content.innerHTML = `<div class="text-center py-10 text-slate-400">暂无测算记录</div>`;
+                return;
+            }
+            const boxBg = !isDarkMode ? "background-color: #f8fafc; border-color: #e2e8f0; color: #334155;" : "background-color: rgba(30, 41, 59, 0.6); border-color: rgba(51, 65, 85, 0.8); color: #cbd5e1;";
+            let html = '';
+            historyLogs.forEach((item, index) => {
+                html += `
+                    <div class="custom-box p-3 sm:p-4 rounded-xl space-y-3 shadow-xs border" style="${boxBg}">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-700/60 pb-2 gap-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="bg-gradient-to-r from-sky-600 to-purple-600 text-white px-2 py-0.5 rounded text-xs font-bold">#${index + 1}</span>
+                                <span class="custom-box px-2 py-0.5 rounded text-xs font-bold border" style="${boxBg}">${item.code}</span>
+                                <span class="font-bold text-xs sm:text-sm">${item.match}</span>
+                            </div>
+                            <span class="text-purple-400 text-[11px]">置信度: ${item.confidence}</span>
+                        </div>
+                        
+                        <div class="space-y-1.5 text-slate-300 text-[11px]">
+                            <div class="text-amber-300 font-bold">${item.capitalIntent}</div>
+                            <div>${item.deepseek}</div>
+                            <div>${item.chatgpt}</div>
+                            <div>${item.marketBase}</div>
+                            <div>${item.bagua}</div>
+                        </div>
+
+                        <div class="pt-3 border-t border-slate-700/60 space-y-3">
+                            <div class="space-y-1">
+                                <div>🤖 <strong>模型聚合综合比分：</strong> <span class="text-sky-400 font-bold">${item.aiModelConsensusScore}</span></div>
+                                <div class="text-[11px] text-slate-300 bg-slate-800/50 p-2 rounded"><strong>定型理由：</strong> ${item.aiReason}</div>
+                            </div>
+                            <div class="space-y-1">
+                                <div>💰 <strong>盘口资本预期比分：</strong> <span class="text-amber-400 font-bold">${item.capitalDesiredScore}</span></div>
+                                <div class="text-[11px] text-slate-300 bg-slate-800/50 p-2 rounded"><strong>定型理由：</strong> ${item.capitalReason}</div>
+                            </div>
+                            <div class="text-[10px] text-slate-500 text-right pt-1">${item.time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            content.innerHTML = html;
+        }
+
+        function closeHistoryModal() { document.getElementById('historyModal').classList.add('hidden'); }
+
+        function exportToExcel() {
+            if (historyLogs.length === 0) { alert('暂无记录可导出！'); return; }
+            const excelData = historyLogs.map((item, index) => ({
+                "序号": index + 1, "编号": item.code, "赛事": item.match, "时间": item.matchTime,
+                "模型聚合比分": item.aiModelConsensusScore, "模型定型理由": item.aiReason,
+                "资本意图比分": item.capitalDesiredScore, "资本定型理由": item.capitalReason,
+                "盘口意图初探": item.capitalIntent, "置信度": item.confidence
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "资本与模型预测报告");
+            XLSX.writeFile(workbook, `资本盘口预测报告_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        }
+    </script>
+</body>
+</html>
