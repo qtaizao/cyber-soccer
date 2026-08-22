@@ -157,6 +157,7 @@ function parse500StarBeidanHtml(html) {
         if (!home || !away || odds.length < 3) return;
         list.push({
             raw: `${league} 北单${String(index + 1).padStart(3, '0')} ${matchTime} ${home} VS ${away} 让球 ${rangNum} ${odds.slice(-3).join(' ')}`,
+            league: normalizeLeagueName(league),
             code: `北单${String(list.length + 1).padStart(3, '0')}`,
             matchName: `${home} VS ${away}`,
             matchTime,
@@ -204,6 +205,7 @@ function parse500LiveRows(rawMatches) {
         const lastOdds = odds.slice(-3);
         list.push({
             raw: `${m[2]} 北单${m[1]} ${m[3]} ${home} VS ${away} 让球 ${rangInfo.rangNum} ${lastOdds.join(' ')}`,
+            league: normalizeLeagueName(m[2]),
             code: `北单${m[1]}`,
             matchName: `${cleanLiveTeamName(home, true)} VS ${cleanLiveTeamName(away, true)}`,
             matchTime: m[3],
@@ -263,8 +265,31 @@ function normalizeLeagueName(value) {
         .replace(/竞彩足球|竞彩|北京单场|北单|胜平负|让球胜平负/g, '')
         .replace(/\d{1,3}$/g, '')
         .trim();
-    if (!text || /^(?:周[一-日]\d+|北单\d+|\d{1,3}|\d{1,2}:\d{2})$/.test(text)) return '其他';
-    return text;
+    if (!text || isBadLeagueName(text)) return '其他';
+    return normalizeKnownLeagueName(text);
+}
+
+function isBadLeagueName(value) {
+    const text = String(value || '').trim();
+    return !text
+        || /(?:VS|vs|对|让球|让胜|让平|让负|主胜|客胜|平局)/.test(text)
+        || /\b\d+\.\d{2}\b/.test(text)
+        || /^(?:周[一-日]\d+|北单\d+|\d{1,3}|\d{1,2}:\d{2})$/.test(text)
+        || text.length > 12;
+}
+
+function normalizeKnownLeagueName(value) {
+    const text = String(value || '').trim();
+    const aliases = [
+        ['韩K', '韩职'], ['K联赛', '韩职'], ['韩职联', '韩职'],
+        ['日职', '日职联'], ['J联赛', '日职联'], ['日乙', '日职乙'],
+        ['美大联盟', '美职足'], ['美职联', '美职足'], ['MLS', '美职足'],
+        ['欧罗巴', '欧联'], ['欧洲联赛', '欧联'],
+        ['欧会杯', '欧协联'], ['欧洲协会联赛', '欧协联'],
+        ['亚冠联赛', '亚冠'], ['澳A联', '澳超']
+    ];
+    const hit = aliases.find(([alias]) => text === alias || text.includes(alias));
+    return hit ? hit[1] : text;
 }
 
 function parseRangInfo(rawText) {
