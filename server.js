@@ -2,6 +2,8 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const cors = require('cors');
 const axios = require('axios');
+const https = require('https');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +13,24 @@ app.use(cors());
 app.use(express.static(__dirname));
 
 const http = axios.create({ timeout: 12000 });
+const legacyTlsHttp = axios.create({
+    timeout: 12000,
+    httpsAgent: new https.Agent({
+        secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
+    }),
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36' }
+});
+
+const XIAODIANHUO_SOURCES = {
+    jc: {
+        page: 'https://kt.xiaodianhuo.com/251/jingcai/?station_id=1156855&station_uuid=05df3q2clavn5j1624169672&back=%2F359%2Fuser%2F178%2Fshop%2Fdetails%2Fmydetail_0okbP.html%3Fid%3D1156855%26station_user_id%3D1156855%26station_uuid%3D05df3q2clavn5j1624169672%26back%3D%252F',
+        content: 'https://kt.xiaodianhuo.com/static/js/content/jingcai/index_790108752116.js'
+    },
+    bd: {
+        page: 'https://kt.xiaodianhuo.com/684/danchang/?station_id=1156855&station_uuid=05df3q2clavn5j1624169672&back=%2F359%2Fuser%2F178%2Fshop%2Fdetails%2Fmydetail_0okbP.html%3Fid%3D1156855%26station_user_id%3D1156855%26station_uuid%3D05df3q2clavn5j1624169672%26back%3D%252F',
+        content: 'https://kt.xiaodianhuo.com/static/js/content/danchang/index_790108752116.js'
+    }
+};
 
 const MODEL_CONFIG = {
     deepseek: {
@@ -66,23 +86,28 @@ app.get('/api/matches/source-new', async (req, res) => {
         res.json({ success: true, matchList: Array.from(matchMap.values()).map(raw => ({ raw })) });
     } catch (e) {
         if (browser) await browser.close();
-        res.status(500).json({ success: false, message: e.message || '抓取失败' });
+        const backup = await fetchXiaodianhuoMatches('jc');
+        if (backup.length) {
+            return res.json({ success: true, source: XIAODIANHUO_SOURCES.jc.page, quality: 'backup', matchList: backup });
+        }
+        res.status(500).json({ success: false, message: `主数据源抓取失败，备选源也未解析到赛事：${e.message || '抓取失败'}` });
     }
 });
 
 app.get('/api/matches/beidan', async (req, res) => {
     const backup = await fetch500StarBeidan();
-    if (backup.length) {
-        return res.json({ success: true, source: 'https://zx.500star.com/zqdc/shuju.php', quality: 'table', matchList: validateBeidanMatches(backup) });
+    const readable500Star = validateBeidanMatches(backup);
+    if (readable500Star.length) {
+        return res.json({ success: true, source: 'https://zx.500star.com/zqdc/shuju.php', quality: 'table', matchList: readable500Star });
     }
 
     const urls = [
+        'https://xx.spftll.cn/#/jc/dpfas1/?tabindex=2',
         'https://www.sporttery.cn/jc/zqdc/',
         'https://www.sporttery.cn/bjdc/',
         'https://www.sporttery.cn/bd/',
         'https://live.500star.com/zqdc.php',
-        'http://live.500star.com/zqdc.php',
-        'https://xx.spftll.cn/#/jc/dpfas1/?tabindex=2'
+        'http://live.500star.com/zqdc.php'
     ];
     let browser = null;
     const errors = [];
@@ -123,9 +148,17 @@ app.get('/api/matches/beidan', async (req, res) => {
         errors.push('500彩票网赛事数据页: 未解析到可用表格行');
 
         await browser.close();
+        const xiaodianhuoBackup = await fetchXiaodianhuoMatches('bd');
+        if (xiaodianhuoBackup.length) {
+            return res.json({ success: true, source: XIAODIANHUO_SOURCES.bd.page, quality: 'backup', matchList: xiaodianhuoBackup });
+        }
         res.json({ success: false, matchList: [], message: `北单数据源未返回可解析盘口：${errors.join('；')}` });
     } catch (e) {
         if (browser) await browser.close();
+        const xiaodianhuoBackup = await fetchXiaodianhuoMatches('bd');
+        if (xiaodianhuoBackup.length) {
+            return res.json({ success: true, source: XIAODIANHUO_SOURCES.bd.page, quality: 'backup', matchList: xiaodianhuoBackup });
+        }
         res.status(500).json({ success: false, matchList: [], message: e.message || '北单抓取失败' });
     }
 });
@@ -140,6 +173,74 @@ async function fetch500StarBeidan() {
     } catch (e) {
         return [];
     }
+}
+
+async function fetchXiaodianhuoMatches(mode) {
+    try {
+        const source = XIAODIANHUO_SOURCES[mode];
+        const r = await legacyTlsHttp.get(source.content, { responseType: 'text' });
+        const html = unwrapXiaodianhuoHtml(String(r.data || ''));
+        const rows = parseXiaodianhuoHtml(html, mode);
+        return mode === 'bd' ? validateBeidanMatches(rows) : normalizeRawMatchList(rows.map(row => row.raw), 'jc');
+    } catch (e) {
+        return [];
+    }
+}
+
+function unwrapXiaodianhuoHtml(scriptText) {
+    const m = String(scriptText || '').match(/^var html = "([\s\S]*)";\s*document\.write|^var html = "([\s\S]*)";\s*document\.getElementsByTagName/);
+    const encoded = m && (m[1] || m[2]);
+    if (!encoded) return String(scriptText || '');
+    try {
+        return JSON.parse(`"${encoded}"`);
+    } catch (e) {
+        return encoded.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\//g, '/');
+    }
+}
+
+function parseXiaodianhuoHtml(html, mode) {
+    const text = htmlToPlainText(html);
+    const list = [];
+    const rowRe = mode === 'bd'
+        ? /(\d{3,4})\s+([\u4e00-\u9fa5A-Za-z0-9]+)\s+(\d{1,2}:\d{2})\s+(?:分析\s+)?(?:\d+\s+)?(.{1,18}?)\s+VS\s+(.{1,18}?)(?:\s+\d+\s+-->|(?:\s+\d+\s+)?(?:0\}"|胜\s+\d+\.\d{2}|平\s+\d+\.\d{2}|负\s+\d+\.\d{2}))/g
+        : /(\d{3})\s+([\u4e00-\u9fa5A-Za-z0-9]+)\s+(\d{1,2}:\d{2})[\s\S]{0,260}?([\u4e00-\u9fa5A-Za-z0-9·.\-]+)\s+VS\s+([\u4e00-\u9fa5A-Za-z0-9·.\-]+)/g;
+    let m;
+    while ((m = rowRe.exec(text)) !== null) {
+        const rawSlice = text.slice(m.index, Math.min(text.length, m.index + 520));
+        const odds = rawSlice.match(/\b\d+\.\d{2}\b/g) || [];
+        const rangInfo = parseRangInfo(rawSlice);
+        const home = cleanTeamName(m[4]);
+        const away = cleanTeamName(m[5]);
+        if (!home || !away || home === away) continue;
+        const row = {
+            raw: `${normalizeLeagueName(m[2])} ${mode === 'bd' ? `北单${m[1]}` : m[1]} ${m[3]} ${home} VS ${away} ${rangInfo.hasRang ? `让球 ${rangInfo.rangNum}` : '胜平负'} ${odds.slice(0, 6).join(' ')}`,
+            league: normalizeLeagueName(m[2]),
+            code: normalizeMatchCode(mode === 'bd' ? `北单${m[1]}` : m[1], mode),
+            matchName: `${home} VS ${away}`,
+            matchTime: m[3],
+            s: odds[0] || '2.00',
+            p: odds[1] || '3.00',
+            f: odds[2] || '3.00',
+            hasRang: rangInfo.hasRang || odds.length >= 6,
+            rangNum: rangInfo.rangNum,
+            rs: odds[3] || '--',
+            rp: odds[4] || '--',
+            rf: odds[5] || '--'
+        };
+        list.push(row);
+    }
+    return mode === 'bd' ? normalizeBeidanMatchList(list) : list;
+}
+
+function htmlToPlainText(html) {
+    return String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;|&#160;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function parseBrowserBeidanRows(pageRows) {
@@ -262,18 +363,27 @@ function normalizeBeidanMatchList(matches) {
 function validateBeidanMatches(matches) {
     return normalizeBeidanMatchList(matches).map((match, index) => ({
         ...match,
-        code: match.code && /^北单\d{3}$/.test(match.code) ? match.code : `北单${String(index + 1).padStart(3, '0')}`
+        code: match.code && /^北单\d{3,4}$/.test(match.code) ? match.code : `北单${String(index + 1).padStart(3, '0')}`
     }));
 }
 
 function isValidBeidanMatch(match) {
     if (!match || !match.matchName || !/\sVS\s/.test(match.matchName)) return false;
+    if (!hasReadableMatchText(match)) return false;
     if (![match.s, match.p, match.f].every(isValidOdd)) return false;
     if (!/(?:周[一-日]\s*)?\d{1,2}:\d{2}/.test(String(match.matchTime || ''))) return false;
     const [home, away] = match.matchName.split(/\s+VS\s+/);
     if (!home || !away || home === away) return false;
     if (isBadTeamFragment(home) || isBadTeamFragment(away)) return false;
     return true;
+}
+
+function hasReadableMatchText(match) {
+    const text = `${match.league || ''} ${match.matchName || ''} ${match.raw || ''}`;
+    if (/[�]/.test(text)) return false;
+    const cjkCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+    return cjkCount + latinCount >= 4;
 }
 
 function isBadTeamFragment(value) {
